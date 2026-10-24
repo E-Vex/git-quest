@@ -1,5 +1,6 @@
 mod achievements;
 mod check;
+mod display;
 mod cli;
 mod github;
 

@@ -1,6 +1,7 @@
 use crate::achievements::{
     GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, Progress, PULL_SHARK, STARSTRUCK,
 };
+use crate::display;
 use crate::github::GithubClient;
 use anyhow::Result;
 
@@ -45,8 +46,6 @@ pub async fn run(username: &str) -> Result<()> {
             def: &GALAXY_BRAIN,
             current: a,
         });
-    } else if !client.has_token() {
-        eprintln!("💡 Set GITHUB_TOKEN to also track Galaxy Brain (accepted discussion answers).");
     }
     if let Some(c) = coauthored {
         items.push(Progress {
@@ -55,21 +54,6 @@ pub async fn run(username: &str) -> Result<()> {
         });
     }
 
-    println!("Achievement progress for {username}\n");
-    for p in &items {
-        match p.next_tier() {
-            Some((tier, threshold)) => println!(
-                "{} {}: {}/{} to {} ({} {} remaining)",
-                p.def.emoji,
-                p.def.name,
-                p.current,
-                threshold,
-                tier,
-                p.remaining(),
-                p.def.hint
-            ),
-            None => println!("{} {}: GOLD achieved 🏆", p.def.emoji, p.def.name),
-        }
-    }
+    display::render_check(username, &items, client.has_token());
     Ok(())
 }
