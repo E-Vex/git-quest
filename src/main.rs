@@ -1,4 +1,5 @@
 mod cli;
+mod achievements;
 mod github;
 
 use clap::Parser;
