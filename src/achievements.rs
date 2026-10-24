@@ -2,8 +2,6 @@
 pub struct AchievementDef {
     pub emoji: &'static str,
     pub name: &'static str,
-    /// What the counter measures (shown in output hints).
-    pub hint: &'static str,
     /// Short unit used in the remaining-count line.
     pub unit: &'static str,
     /// Thresholds for [Bronze, Silver, Gold].
@@ -13,7 +11,6 @@ pub struct AchievementDef {
 pub const PULL_SHARK: AchievementDef = AchievementDef {
     emoji: "🦈",
     name: "Pull Shark",
-    hint: "merged pull requests you authored",
     unit: "merged PRs",
     tiers: [16, 124, 620],
 };
@@ -21,7 +18,6 @@ pub const PULL_SHARK: AchievementDef = AchievementDef {
 pub const STARSTRUCK: AchievementDef = AchievementDef {
     emoji: "⭐",
     name: "Starstruck",
-    hint: "stars across repositories you own",
     unit: "stars",
     tiers: [16, 128, 512],
 };
@@ -29,7 +25,6 @@ pub const STARSTRUCK: AchievementDef = AchievementDef {
 pub const GALAXY_BRAIN: AchievementDef = AchievementDef {
     emoji: "🧠",
     name: "Galaxy Brain",
-    hint: "accepted answers in GitHub Discussions",
     unit: "accepted answers",
     tiers: [2, 8, 16],
 };
@@ -37,7 +32,6 @@ pub const GALAXY_BRAIN: AchievementDef = AchievementDef {
 pub const PAIR_EXTRAORDINAIRE: AchievementDef = AchievementDef {
     emoji: "👥",
     name: "Pair Extraordinaire",
-    hint: "commits co-authored with someone else",
     unit: "co-authored commits",
     tiers: [1, 10, 20],
 };

@@ -23,7 +23,10 @@ impl GithubClient {
             .filter(|t| !t.trim().is_empty());
 
         let mut headers = HeaderMap::new();
-        headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/vnd.github+json"),
+        );
         let ua = format!("git-quest/{}", env!("CARGO_PKG_VERSION"));
         headers.insert(USER_AGENT, HeaderValue::from_str(&ua)?);
         if let Some(t) = &token {
@@ -175,7 +178,10 @@ impl GithubClient {
         let body = serde_json::json!({ "query": query, "variables": { "login": login } });
 
         let resp: Resp = self
-            .send(self.http.post(GRAPHQL_URL).json(&body), "Galaxy Brain GraphQL")
+            .send(
+                self.http.post(GRAPHQL_URL).json(&body),
+                "Galaxy Brain GraphQL",
+            )
             .await?;
 
         if let Some(err) = resp.errors.first() {
@@ -229,29 +235,21 @@ impl GithubClient {
             created_at: String,
             #[serde(default)]
             reactions: Option<Reactions>,
-            #[serde(default)]
-            labels: Vec<Label>,
         }
         #[derive(Deserialize)]
         struct Reactions {
             total_count: u64,
         }
-        #[derive(Deserialize)]
-        struct Label {
-            name: String,
-        }
 
         let q = format!("label:\"good first issue\" state:open language:{lang} no:assignee");
         let r: R = self
             .send(
-                self.http
-                    .get(format!("{REST_BASE}/search/issues"))
-                    .query(&[
-                        ("q", q),
-                        ("sort", sort.to_string()),
-                        ("order", "desc".to_string()),
-                        ("per_page", limit.to_string()),
-                    ]),
+                self.http.get(format!("{REST_BASE}/search/issues")).query(&[
+                    ("q", q),
+                    ("sort", sort.to_string()),
+                    ("order", "desc".to_string()),
+                    ("per_page", limit.to_string()),
+                ]),
                 "Hunt issue search",
             )
             .await?;
@@ -272,7 +270,6 @@ impl GithubClient {
                     comments: it.comments,
                     reactions: it.reactions.map(|x| x.total_count).unwrap_or(0),
                     created_at: it.created_at,
-                    labels: it.labels.into_iter().map(|l| l.name).collect(),
                 }
             })
             .collect();
@@ -290,5 +287,4 @@ pub struct IssueItem {
     pub reactions: u64,
     /// ISO-8601 creation timestamp.
     pub created_at: String,
-    pub labels: Vec<String>,
 }

@@ -93,7 +93,10 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool) {
     if !has_token {
         println!(
             "{}",
-            dim("💡 Set GITHUB_TOKEN to track Galaxy Brain and lift rate limits to 5000 req/h".into())
+            dim(
+                "💡 Set GITHUB_TOKEN to track Galaxy Brain and lift rate limits to 5000 req/h"
+                    .into()
+            )
         );
     }
     println!();
@@ -102,7 +105,10 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool) {
 /// Render the `hunt` command results.
 pub fn render_hunt(lang: &str, total: u64, issues: &[IssueItem]) {
     println!();
-    println!("{}", bold(format!("🎯 Hunt — good first issues for `{lang}`")));
+    println!(
+        "{}",
+        bold(format!("🎯 Hunt — good first issues for `{lang}`"))
+    );
     println!();
     if issues.is_empty() {
         println!(
@@ -127,7 +133,10 @@ pub fn render_hunt(lang: &str, total: u64, issues: &[IssueItem]) {
     }
     println!(
         "{}",
-        dim(format!("🎣 {total} open issues match — showing top {}", issues.len()))
+        dim(format!(
+            "🎣 {total} open issues match — showing top {}",
+            issues.len()
+        ))
     );
     println!(
         "{}",

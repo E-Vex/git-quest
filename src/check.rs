@@ -1,6 +1,4 @@
-use crate::achievements::{
-    GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, Progress, PULL_SHARK, STARSTRUCK,
-};
+use crate::achievements::{Progress, GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, PULL_SHARK, STARSTRUCK};
 use crate::display;
 use crate::github::GithubClient;
 use anyhow::Result;
