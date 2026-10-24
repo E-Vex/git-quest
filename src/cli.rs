@@ -21,10 +21,38 @@ pub enum Command {
     /// Hunt for open `good first issue` tasks matching your stack
     Hunt {
         /// Programming language to filter by (e.g. rust, go, python)
-        #[arg(short, long)]
+        #[arg(short = 'l', long)]
         lang: String,
         /// Maximum number of issues to show
-        #[arg(short, long, default_value_t = 3)]
+        #[arg(short = 'n', long, default_value_t = 3)]
         limit: u8,
+        /// Sort results by community validation or freshness
+        #[arg(short = 's', long, value_enum, default_value_t = SortBy::Reactions)]
+        sort: SortBy,
     },
+}
+
+/// Sort criterion for `hunt` results.
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum SortBy {
+    /// Most 👍 reactions (community-validated)
+    Reactions,
+    /// Newest first
+    Created,
+    /// Recently updated
+    Updated,
+    /// Most discussed
+    Comments,
+}
+
+impl SortBy {
+    /// Map to the GitHub Search API `sort` value.
+    pub fn as_query(&self) -> &'static str {
+        match self {
+            SortBy::Reactions => "reactions-+1",
+            SortBy::Created => "created",
+            SortBy::Updated => "updated",
+            SortBy::Comments => "comments",
+        }
+    }
 }

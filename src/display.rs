@@ -1,4 +1,5 @@
 use crate::achievements::Progress;
+use crate::github::IssueItem;
 use owo_colors::OwoColorize;
 
 const BAR_WIDTH: usize = 12;
@@ -6,6 +7,14 @@ const BAR_WIDTH: usize = 12;
 /// Honor the de-facto standard `NO_COLOR` env var.
 fn colors_enabled() -> bool {
     std::env::var("NO_COLOR").is_err()
+}
+
+fn bold(s: String) -> String {
+    if colors_enabled() {
+        s.bold().to_string()
+    } else {
+        s
+    }
 }
 
 /// Colorize by proximity to the next tier.
@@ -87,5 +96,42 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool) {
             dim("💡 Set GITHUB_TOKEN to track Galaxy Brain and lift rate limits to 5000 req/h".into())
         );
     }
+    println!();
+}
+
+/// Render the `hunt` command results.
+pub fn render_hunt(lang: &str, total: u64, issues: &[IssueItem]) {
+    println!();
+    println!("{}", bold(format!("🎯 Hunt — good first issues for `{lang}`")));
+    println!();
+    if issues.is_empty() {
+        println!(
+            "{}",
+            dim("No open `good first issue` tasks found for this language.".into())
+        );
+        println!();
+        return;
+    }
+    for (i, it) in issues.iter().enumerate() {
+        let date = it.created_at.get(..10).unwrap_or(it.created_at.as_str());
+        println!(" {}. {}", i + 1, bold(it.title.clone()));
+        println!(
+            "    {}  {}  {}  {}",
+            cyan(format!("📦 {}", it.repo)),
+            dim(format!("👍 {}", it.reactions)),
+            dim(format!("💬 {}", it.comments)),
+            dim(format!("📅 {}", date)),
+        );
+        println!("    {}", dim(it.url.clone()));
+        println!();
+    }
+    println!(
+        "{}",
+        dim(format!("🎣 {total} open issues match — showing top {}", issues.len()))
+    );
+    println!(
+        "{}",
+        cyan("💡 Read the repo's CONTRIBUTING.md first, then ship a small, focused PR. Good luck! 🚀".into())
+    );
     println!();
 }

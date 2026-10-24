@@ -204,7 +204,6 @@ impl GithubClient {
             items: Vec<Item>,
         }
         #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
         struct Item {
             title: String,
             html_url: String,

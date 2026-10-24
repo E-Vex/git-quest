@@ -1,8 +1,9 @@
 mod achievements;
 mod check;
-mod display;
 mod cli;
+mod display;
 mod github;
+mod hunt;
 
 use clap::Parser;
 
@@ -11,9 +12,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
         cli::Command::Check { username } => check::run(&username).await?,
-        cli::Command::Hunt { lang, limit } => {
-            println!("Hunting good first issues for {lang} (limit {limit})… (coming in next commit)");
-        }
+        cli::Command::Hunt { lang, limit, sort } => hunt::run(&lang, limit, &sort).await?,
     }
     Ok(())
 }
