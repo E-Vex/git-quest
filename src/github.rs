@@ -53,11 +53,28 @@ impl GithubClient {
         what: &str,
     ) -> Result<T> {
         let resp = req.send().await?;
-        match resp.status().as_u16() {
+        let status = resp.status();
+        match status.as_u16() {
             404 => Err(anyhow!("{what}: not found (404) — check the username")),
-            403 => Err(anyhow!(
-                "{what}: rate limited by GitHub (403).\n  Fix: export GITHUB_TOKEN=ghp_xxx\n  Create a token at https://github.com/settings/tokens (no scopes needed for public data)"
-            )),
+            403 | 429 => {
+                #[derive(Deserialize)]
+                struct Body {
+                    message: String,
+                }
+                let body: Option<Body> = resp.json().await.ok();
+                if body
+                    .as_ref()
+                    .is_some_and(|b| b.message.contains("secondary rate limit"))
+                {
+                    Err(anyhow!(
+                        "{what}: GitHub secondary rate limit hit (abuse detection).\n  This is temporary — wait a few minutes, then try again.\n  Tip: avoid running several git-quest commands back-to-back within a minute."
+                    ))
+                } else {
+                    Err(anyhow!(
+                        "{what}: rate limited by GitHub ({status}).\n  Fix: export GITHUB_TOKEN=ghp_xxx  (raises 60 → 5000 core requests/hour)\n  Create a token at https://github.com/settings/tokens (no scopes needed for public data)"
+                    ))
+                }
+            }
             _ => {
                 let resp = resp.error_for_status()?;
                 Ok(resp.json().await?)
