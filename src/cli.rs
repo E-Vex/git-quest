@@ -31,6 +31,12 @@ pub enum ColorWhen {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Generate shell completion scripts
+    Complete {
+        /// Shell type (bash, zsh, fish, powershell, elvish)
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
     /// Check a GitHub user's achievement progress
     Check {
         /// GitHub username to analyze (e.g. octocat); omit for the token owner
