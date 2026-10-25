@@ -44,7 +44,8 @@ cargo install --path .
 ### `check` — your achievement progress
 
 ```bash
-git-quest check <username>
+git-quest check <username>          # check progress for a user
+git-quest check                      # check progress for token owner
 ```
 
 ```text
@@ -100,12 +101,35 @@ No scopes needed for public data — leave every checkbox unchecked.
 - **Pair Extraordinaire** — commit search for commits you authored that carry a
   `Co-Authored-By:` trailer (an approximation of GitHub's internal count)
 
+```bash
+git-quest hunt --label "help wanted"     # search any label
+git-quest hunt --lang rust --label "good first issue"
+```
+
+```bash
+git-quest check --json <username>      # raw JSON output
+git-quest hunt --json --lang rust
+```
+
+```bash
+git-quest complete bash > /etc/bash_completion.d/git-quest  # shell completions
+```
+
+```bash
+git-quest readme <username>            # markdown block for profile README
+```
+
 ## Roadmap
 
 - [x] v0.1.0 — `check` + `hunt`
 - [ ] v0.2.0 — `track`: watch your progress, notify when a tier is within reach
-- [ ] v0.2.0 — `readme`: generate a progress block for your profile README
-- [ ] `help wanted` label support in `hunt`
+- [x] `hunt --label`
+- [x] `--json`
+- [x] `check` without name
+- [x] `complete`
+- [x] `readme`
+- [x] automatic retry
+- [x] partial results
 - [ ] Publish to crates.io and Homebrew
 
 ## Contributing
