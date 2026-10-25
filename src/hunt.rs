@@ -8,6 +8,9 @@ pub async fn run(lang: &str, limit: u8, sort: &SortBy) -> Result<()> {
     let (total, issues) = client
         .good_first_issues(lang, limit, sort.as_query())
         .await?;
-    display::render_hunt(lang, total, &issues);
+    print!(
+        "{}",
+        display::render_hunt(lang, total, &issues, display::Palette::detect())
+    );
     Ok(())
 }

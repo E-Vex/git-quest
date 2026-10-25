@@ -59,6 +59,14 @@ pub async fn run(username: &str) -> Result<()> {
         });
     }
 
-    display::render_check(username, &items, client.has_token());
+    print!(
+        "{}",
+        display::render_check(
+            username,
+            &items,
+            client.has_token(),
+            display::Palette::detect()
+        )
+    );
     Ok(())
 }
