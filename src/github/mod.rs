@@ -27,17 +27,70 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    /// Read the configuration from the environment (`GITHUB_TOKEN`).
-    pub fn from_env() -> Self {
-        let token = std::env::var("GITHUB_TOKEN")
-            .ok()
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty());
-        Self {
+    /// Read the configuration from the environment:
+    ///
+    /// - `GITHUB_TOKEN` — personal access token
+    /// - `GITHUB_API_URL` — REST root (GitHub Enterprise Server, e.g.
+    ///   `https://ghe.example.com/api/v3`); also set by GitHub Actions
+    /// - `GITHUB_GRAPHQL_URL` — GraphQL endpoint, derived from the REST
+    ///   root when absent
+    pub fn from_env() -> Result<Self> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    /// Testable core of [`ClientConfig::from_env`].
+    fn from_vars(get: impl Fn(&str) -> Option<String>) -> Result<Self> {
+        let non_empty = |name: &str| {
+            get(name)
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        };
+
+        let token = non_empty("GITHUB_TOKEN");
+
+        let rest_base = match non_empty("GITHUB_API_URL") {
+            Some(url) => validate_endpoint("GITHUB_API_URL", &url)?
+                .trim_end_matches('/')
+                .to_string(),
+            None => DEFAULT_REST_BASE.to_string(),
+        };
+        let graphql_url = match non_empty("GITHUB_GRAPHQL_URL") {
+            Some(url) => validate_endpoint("GITHUB_GRAPHQL_URL", &url)?,
+            None => default_graphql_url(&rest_base),
+        };
+
+        Ok(Self {
             token,
-            rest_base: DEFAULT_REST_BASE.to_string(),
-            graphql_url: format!("{DEFAULT_REST_BASE}/graphql"),
+            rest_base,
+            graphql_url,
+        })
+    }
+}
+
+/// Require https, except for loopback hosts, so a token is never sent
+/// over plain HTTP to a remote machine by accident.
+fn validate_endpoint(name: &str, url: &str) -> Result<String> {
+    if url.starts_with("https://") {
+        return Ok(url.to_string());
+    }
+    if let Some(rest) = url.strip_prefix("http://") {
+        let host = rest.split(['/', ':']).next().unwrap_or_default();
+        if matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+            return Ok(url.to_string());
         }
+        return Err(anyhow!(
+            "{name} must use https:// (plain http is only allowed for localhost)"
+        ));
+    }
+    Err(anyhow!("{name} must start with https://"))
+}
+
+/// GitHub.com serves GraphQL at `<rest>/graphql`; GitHub Enterprise
+/// Server serves REST at `/api/v3` but GraphQL at `/api/graphql`.
+fn default_graphql_url(rest_base: &str) -> String {
+    match rest_base.strip_suffix("/v3") {
+        Some(api_root) => format!("{api_root}/graphql"),
+        None => format!("{rest_base}/graphql"),
     }
 }
 
@@ -56,7 +109,7 @@ pub struct GithubClient {
 impl GithubClient {
     /// Build a client from the environment.
     pub fn new() -> Result<Self> {
-        Self::with_config(ClientConfig::from_env())
+        Self::with_config(ClientConfig::from_env()?)
     }
 
     /// Build a client from an explicit configuration.
@@ -374,5 +427,78 @@ mod tests {
     #[test]
     fn issue_query_keeps_multi_word_languages_together() {
         assert!(issue_query("Jupyter Notebook").contains(r#"language:"Jupyter Notebook""#));
+    }
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn config(vars: &[(&str, &str)]) -> Result<ClientConfig> {
+        let map: HashMap<String, String> = vars
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        ClientConfig::from_vars(|name| map.get(name).cloned())
+    }
+
+    #[test]
+    fn defaults_to_github_dot_com() {
+        let c = config(&[]).unwrap();
+        assert_eq!(c.token, None);
+        assert_eq!(c.rest_base, "https://api.github.com");
+        assert_eq!(c.graphql_url, "https://api.github.com/graphql");
+    }
+
+    #[test]
+    fn token_is_trimmed_and_blank_means_none() {
+        assert_eq!(
+            config(&[("GITHUB_TOKEN", " ghp_x\n")])
+                .unwrap()
+                .token
+                .as_deref(),
+            Some("ghp_x")
+        );
+        assert_eq!(config(&[("GITHUB_TOKEN", "  ")]).unwrap().token, None);
+    }
+
+    #[test]
+    fn custom_api_url_loses_its_trailing_slash() {
+        let c = config(&[("GITHUB_API_URL", "https://api.example.com/")]).unwrap();
+        assert_eq!(c.rest_base, "https://api.example.com");
+        assert_eq!(c.graphql_url, "https://api.example.com/graphql");
+    }
+
+    #[test]
+    fn enterprise_server_graphql_lives_outside_v3() {
+        let c = config(&[("GITHUB_API_URL", "https://ghe.example.com/api/v3")]).unwrap();
+        assert_eq!(c.rest_base, "https://ghe.example.com/api/v3");
+        assert_eq!(c.graphql_url, "https://ghe.example.com/api/graphql");
+    }
+
+    #[test]
+    fn explicit_graphql_url_wins() {
+        let c = config(&[
+            ("GITHUB_API_URL", "https://api.example.com"),
+            ("GITHUB_GRAPHQL_URL", "https://gql.example.com/graphql"),
+        ])
+        .unwrap();
+        assert_eq!(c.graphql_url, "https://gql.example.com/graphql");
+    }
+
+    #[test]
+    fn plain_http_is_only_allowed_for_loopback() {
+        assert!(config(&[("GITHUB_API_URL", "http://localhost:8080")]).is_ok());
+        assert!(config(&[("GITHUB_API_URL", "http://127.0.0.1:9")]).is_ok());
+        assert!(config(&[("GITHUB_API_URL", "http://evil.example.com")]).is_err());
+        assert!(config(&[("GITHUB_API_URL", "ftp://example.com")]).is_err());
+        assert!(config(&[("GITHUB_API_URL", "example.com")]).is_err());
+    }
+
+    #[test]
+    fn plain_http_lookalike_hosts_are_rejected() {
+        assert!(config(&[("GITHUB_API_URL", "http://localhost.evil.com")]).is_err());
+        assert!(config(&[("GITHUB_GRAPHQL_URL", "http://evil.com/localhost")]).is_err());
     }
 }
