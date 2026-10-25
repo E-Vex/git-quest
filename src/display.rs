@@ -163,52 +163,33 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Pa
 }
 
 /// Render a markdown progress block suitable for a profile README.
-pub fn render_readme(_username: &str, items: &[Progress], _pal: Palette) -> String {
+pub fn render_readme(username: &str, items: &[Progress], _pal: Palette) -> String {
     let mut out = String::new();
     out.push_str("<!-- git-quest -->\n");
-    out.push_str("## GitHub Achievements\n\n");
+    out.push_str(&format!("## GitHub Achievements — {username}\n\n"));
     for p in items {
-        let name = p.def.name;
         let frac = p.fraction();
         let bar_str = bar(frac);
-        let (status, remaining_text) = match p.next_tier() {
-            Some((tier, threshold)) => {
-                let remaining = p.remaining();
-                let rem_str = if remaining == 0 {
-                    "complete".to_string()
-                } else {
-                    format!("{remaining} remaining")
-                };
-                let tier_str = match tier {
-                    Tier::Default => format!("{} to unlock", threshold),
-                    _ => format!("{} to {}", threshold, tier),
-                };
-                (
-                    format!("{}/{} to {}", p.current, threshold, tier_str),
-                    rem_str,
-                )
-            }
-            None => (
-                "GOLD COMPLETE".to_string(),
-                "🏆 every tier achieved".to_string(),
-            ),
+        // One clean status line, mirroring `render_check`: the count is
+        // never repeated and the tier name appears exactly once.
+        let status = match p.next_tier() {
+            Some((tier, threshold)) => match tier {
+                Tier::Default => format!("{}/{} to unlock", p.current, threshold),
+                _ => format!("{}/{} to {tier}", p.current, threshold),
+            },
+            None => "GOLD COMPLETE 🏆".to_string(),
         };
-        let detail_str = p.detail.as_deref().unwrap_or("");
-        let detail_part = if detail_str.is_empty() {
-            String::new()
-        } else {
-            format!(" · {}", detail_str)
+        let remaining = match p.next_tier() {
+            Some(_) => format!("{} {} remaining", p.remaining(), p.def.unit),
+            None => "every tier achieved".to_string(),
+        };
+        let detail_part = match &p.detail {
+            Some(detail) => format!(" · {detail}"),
+            None => String::new(),
         };
         out.push_str(&format!(
-            "- **{}** `{}` — {}/{} | `{}` — {}{}{}\n",
-            p.def.emoji,
-            name,
-            p.current,
-            p.def.tiers.first().copied().unwrap_or(0),
-            status,
-            bar_str,
-            remaining_text,
-            detail_part
+            "- **{}** `{}` — `{status}` — `{bar_str}` — {remaining}{detail_part}\n",
+            p.def.emoji, p.def.name,
         ));
     }
     out.push_str("<!-- /git-quest -->\n");
@@ -396,6 +377,48 @@ mod tests {
         let out = render_hunt("rust", "good first issue", 0, &[], plain());
         assert!(out.contains("`good first issue` tasks for `rust`"));
         assert!(out.contains("No open tasks found"));
+    }
+
+    #[test]
+    fn readme_names_the_user_and_wraps_in_markers() {
+        let items = [progress(&PULL_SHARK, 72)];
+        let out = render_readme("octocat", &items, plain());
+        assert!(out.starts_with("<!-- git-quest -->\n"));
+        assert!(out.contains("## GitHub Achievements — octocat"));
+        assert!(out.trim_end().ends_with("<!-- /git-quest -->"));
+    }
+
+    #[test]
+    fn readme_status_is_not_duplicated_or_garbled() {
+        let items = [progress(&PULL_SHARK, 72)];
+        let out = render_readme("octocat", &items, plain());
+        // The old renderer produced "72/128 to 128 to Silver"; each tier
+        // name and threshold must appear exactly once per line.
+        assert!(out.contains("72/128 to Silver"), "{out}");
+        assert!(!out.contains("to 128 to"), "{out}");
+        assert!(out.contains("56 merged PRs remaining"), "{out}");
+    }
+
+    #[test]
+    fn readme_uses_unlock_wording_for_the_default_tier() {
+        let items = [progress(&STARSTRUCK, 4)];
+        let out = render_readme("octocat", &items, plain());
+        assert!(out.contains("4/16 to unlock"), "{out}");
+        assert!(out.contains("12 stars remaining"), "{out}");
+    }
+
+    #[test]
+    fn readme_reports_gold_complete_and_details() {
+        let items = [
+            progress(&PULL_SHARK, 5000),
+            Progress {
+                detail: Some("best repo: octocat/hello".into()),
+                ..progress(&STARSTRUCK, 4)
+            },
+        ];
+        let out = render_readme("octocat", &items, plain());
+        assert!(out.contains("GOLD COMPLETE 🏆"), "{out}");
+        assert!(out.contains("· best repo: octocat/hello"), "{out}");
     }
 
     #[test]
