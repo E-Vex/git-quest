@@ -2,7 +2,12 @@ use anyhow::{anyhow, Result};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+mod error;
+
+use error::classify;
+pub use error::ApiError;
 
 const REST_BASE: &str = "https://api.github.com";
 const GRAPHQL_URL: &str = "https://api.github.com/graphql";
@@ -56,41 +61,42 @@ impl GithubClient {
         self.token.is_some()
     }
 
-    /// Send a request and decode JSON, mapping common failures to
-    /// actionable error messages.
+    /// Send a request and decode JSON, mapping failures to a typed
+    /// [`ApiError`] with an actionable message.
     async fn send<T: DeserializeOwned>(
         &self,
         req: reqwest::RequestBuilder,
         what: &str,
-    ) -> Result<T> {
-        let resp = req.send().await?;
+    ) -> Result<T, ApiError> {
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ApiError::from_reqwest(what, e))?;
         let status = resp.status();
-        match status.as_u16() {
-            404 => Err(anyhow!("{what}: not found (404) — check the username")),
-            403 | 429 => {
-                #[derive(Deserialize)]
-                struct Body {
-                    message: String,
-                }
-                let body: Option<Body> = resp.json().await.ok();
-                if body
-                    .as_ref()
-                    .is_some_and(|b| b.message.contains("secondary rate limit"))
-                {
-                    Err(anyhow!(
-                        "{what}: GitHub secondary rate limit hit (abuse detection).\n  This is temporary — wait a few minutes, then try again.\n  Tip: avoid running several git-quest commands back-to-back within a minute."
-                    ))
-                } else {
-                    Err(anyhow!(
-                        "{what}: rate limited by GitHub ({status}).\n  Fix: export GITHUB_TOKEN=ghp_xxx  (raises 60 → 5000 core requests/hour)\n  Create a token at https://github.com/settings/tokens (no scopes needed for public data)"
-                    ))
-                }
-            }
-            _ => {
-                let resp = resp.error_for_status()?;
-                Ok(resp.json().await?)
-            }
+        if status.is_success() {
+            return resp
+                .json()
+                .await
+                .map_err(|e| ApiError::from_decode(what, status.as_u16(), e));
         }
+
+        #[derive(Deserialize)]
+        struct ErrorBody {
+            message: String,
+        }
+        let headers = resp.headers().clone();
+        let body = resp.text().await.unwrap_or_default();
+        let message = serde_json::from_str::<ErrorBody>(&body)
+            .ok()
+            .map(|b| b.message);
+        Err(classify(
+            what,
+            status.as_u16(),
+            &headers,
+            message.as_deref(),
+            self.token.is_some(),
+            SystemTime::now(),
+        ))
     }
 
     /// Pull Shark — merged pull requests authored by `username`.
