@@ -61,7 +61,7 @@ fn bar(frac: f64) -> String {
 /// Render the `check` command results.
 pub fn render_check(username: &str, items: &[Progress], has_token: bool) {
     println!();
-    println!("{}", format!("Achievement progress for {username}").bold());
+    println!("{}", bold(format!("Achievement progress for {username}")));
     println!();
     for p in items {
         let name = format!("{:<19}", p.def.name);
