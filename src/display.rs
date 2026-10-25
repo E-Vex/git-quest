@@ -1,4 +1,4 @@
-use crate::achievements::Progress;
+use crate::achievements::{Progress, Tier};
 use crate::github::IssueItem;
 use owo_colors::OwoColorize;
 
@@ -68,7 +68,10 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool) {
         let frac = p.fraction();
         let (status, remaining) = match p.next_tier() {
             Some((tier, threshold)) => (
-                format!("{}/{} to {}", p.current, threshold, tier),
+                match tier {
+                    Tier::Default => format!("{}/{} to unlock", p.current, threshold),
+                    _ => format!("{}/{} to {}", p.current, threshold, tier),
+                },
                 format!("{} {} remaining", p.remaining(), p.def.unit),
             ),
             None => (

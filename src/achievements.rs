@@ -1,8 +1,10 @@
 use std::fmt;
 
-/// A badge tier above the base level.
+/// A badge tier. `Default` is the base badge GitHub awards at the first
+/// threshold; Bronze, Silver and Gold are the upgrades on top of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tier {
+    Default,
     Bronze,
     Silver,
     Gold,
@@ -10,11 +12,12 @@ pub enum Tier {
 
 impl Tier {
     /// Tiers in ascending order of difficulty.
-    pub const ALL: [Tier; 3] = [Tier::Bronze, Tier::Silver, Tier::Gold];
+    pub const ALL: [Tier; 4] = [Tier::Default, Tier::Bronze, Tier::Silver, Tier::Gold];
 
     /// Human-readable tier name.
     pub fn name(self) -> &'static str {
         match self {
+            Tier::Default => "Default",
             Tier::Bronze => "Bronze",
             Tier::Silver => "Silver",
             Tier::Gold => "Gold",
@@ -34,36 +37,39 @@ pub struct AchievementDef {
     pub name: &'static str,
     /// Short unit used in the remaining-count line.
     pub unit: &'static str,
-    /// Thresholds for [Bronze, Silver, Gold].
-    pub tiers: [u64; 3],
+    /// Thresholds for [Default, Bronze, Silver, Gold].
+    pub tiers: [u64; 4],
 }
+
+// Tier thresholds. GitHub does not publish these officially; the values
+// below are the community-documented ones (Default / Bronze / Silver / Gold).
 
 pub const PULL_SHARK: AchievementDef = AchievementDef {
     emoji: "🦈",
     name: "Pull Shark",
     unit: "merged PRs",
-    tiers: [16, 124, 620],
+    tiers: [2, 16, 128, 1024],
 };
 
 pub const STARSTRUCK: AchievementDef = AchievementDef {
     emoji: "⭐",
     name: "Starstruck",
     unit: "stars",
-    tiers: [16, 128, 512],
+    tiers: [16, 128, 512, 4096],
 };
 
 pub const GALAXY_BRAIN: AchievementDef = AchievementDef {
     emoji: "🧠",
     name: "Galaxy Brain",
     unit: "accepted answers",
-    tiers: [2, 8, 16],
+    tiers: [2, 8, 16, 32],
 };
 
 pub const PAIR_EXTRAORDINAIRE: AchievementDef = AchievementDef {
     emoji: "👥",
     name: "Pair Extraordinaire",
     unit: "co-authored commits",
-    tiers: [1, 10, 20],
+    tiers: [1, 10, 24, 48],
 };
 
 /// Live progress of one achievement.
