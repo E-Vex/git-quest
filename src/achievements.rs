@@ -102,7 +102,21 @@ impl Progress {
     /// Progress fraction toward the next tier, clamped to [0, 1].
     pub fn fraction(&self) -> f64 {
         match self.next_tier() {
-            Some((_, threshold)) => (self.current as f64 / threshold as f64).clamp(0.0, 1.0),
+            Some((tier, threshold)) => {
+                let prev_threshold = match tier {
+                    Tier::Default => 0,
+                    Tier::Bronze => self.def.tiers[0],
+                    Tier::Silver => self.def.tiers[1],
+                    Tier::Gold => self.def.tiers[2],
+                };
+                let total_needed = threshold.saturating_sub(prev_threshold);
+                let current_progress = self.current.saturating_sub(prev_threshold);
+                if total_needed == 0 {
+                    1.0
+                } else {
+                    (current_progress as f64 / total_needed as f64).clamp(0.0, 1.0)
+                }
+            }
             None => 1.0,
         }
     }
@@ -160,9 +174,16 @@ mod tests {
     }
 
     #[test]
-    fn fraction_is_relative_to_the_next_threshold() {
-        assert_eq!(progress(8).fraction(), 0.5);
-        assert_eq!(progress(64).fraction(), 0.5);
+    fn fraction_is_relative_to_the_tier_range() {
+        // progress(8): next is Bronze (16), prev is Default (2).
+        // range is 2..16 (total 14). current is 8, so progress is 8 - 2 = 6.
+        // fraction = 6 / 14 ≈ 0.42857
+        assert!((progress(8).fraction() - 6.0 / 14.0).abs() < 1e-6);
+
+        // progress(64): next is Silver (128), prev is Bronze (16).
+        // range is 16..128 (total 112). current is 64, so progress is 64 - 16 = 48.
+        // fraction = 48 / 112 ≈ 0.42857
+        assert!((progress(64).fraction() - 48.0 / 112.0).abs() < 1e-6);
     }
 
     #[test]
