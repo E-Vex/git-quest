@@ -1,7 +1,9 @@
 use crate::achievements::{Progress, Tier};
 use crate::github::IssueItem;
 use owo_colors::OwoColorize;
+use std::ffi::OsStr;
 use std::fmt::Write as _;
+use std::io::IsTerminal;
 
 const BAR_WIDTH: usize = 12;
 
@@ -19,9 +21,13 @@ impl Palette {
         Self { enabled }
     }
 
-    /// Honor the de-facto standard `NO_COLOR` env var.
+    /// Auto-detect: colors only on a terminal, and never when the
+    /// `NO_COLOR` convention (<https://no-color.org>) asks for none.
     pub fn detect() -> Self {
-        Self::new(std::env::var("NO_COLOR").is_err())
+        Self::new(colors_allowed(
+            std::env::var_os("NO_COLOR").as_deref(),
+            std::io::stdout().is_terminal(),
+        ))
     }
 
     fn bold(self, s: impl Into<String>) -> String {
@@ -69,6 +75,15 @@ impl Palette {
             s.red().to_string()
         }
     }
+}
+
+/// Pure decision behind [`Palette::detect`].
+///
+/// Per the NO_COLOR spec the variable only counts when it is set to a
+/// *non-empty* value.
+fn colors_allowed(no_color: Option<&OsStr>, is_terminal: bool) -> bool {
+    let disabled = no_color.is_some_and(|v| !v.is_empty());
+    is_terminal && !disabled
 }
 
 fn bar(frac: f64) -> String {
@@ -369,5 +384,18 @@ mod tests {
         let colored = render_hunt("rust", 2, &[issue(1), issue(2)], Palette::new(true));
         let plain_out = render_hunt("rust", 2, &[issue(1), issue(2)], plain());
         assert_eq!(strip_ansi(&colored), plain_out);
+    }
+
+    #[test]
+    fn colors_need_a_terminal() {
+        assert!(colors_allowed(None, true));
+        assert!(!colors_allowed(None, false));
+    }
+
+    #[test]
+    fn no_color_disables_colors_unless_empty() {
+        assert!(!colors_allowed(Some(OsStr::new("1")), true));
+        assert!(!colors_allowed(Some(OsStr::new("anything")), true));
+        assert!(colors_allowed(Some(OsStr::new("")), true));
     }
 }
