@@ -16,27 +16,36 @@ pub async fn run(username: &str, pal: Palette, json: bool) -> Result<()> {
     } else {
         username.to_string()
     };
-    let client = GithubClient::new()?;
 
-    let (prs, stars, answers, coauthored) = tokio::join!(
+    let (prs_result, stars_result, answers_result, coauthored_result) = tokio::join!(
         client.merged_pr_count(&username),
         client.top_repo_stars(&username),
         client.accepted_discussion_answers(&username),
         client.coauthored_commit_count(&username),
     );
-    let prs = prs?;
-    let (star_repo, stars) = match stars? {
-        Some((repo, stars)) => (Some(repo), stars),
-        None => (None, 0),
+    let prs = match prs_result {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("⚠️  Pull Shark unavailable: {e}");
+            0
+        }
     };
-    let answers = match answers {
+    let (star_repo, stars) = match stars_result {
+        Ok(Some((repo, s))) => (Some(repo), s),
+        Ok(None) => (None, 0),
+        Err(e) => {
+            eprintln!("⚠️  Starstruck unavailable: {e}");
+            (None, 0)
+        }
+    };
+    let answers = match answers_result {
         Ok(v) => v,
         Err(e) => {
             eprintln!("⚠️  Galaxy Brain unavailable: {e}");
             None
         }
     };
-    let coauthored = match coauthored {
+    let coauthored = match coauthored_result {
         Ok(v) => Some(v),
         Err(e) => {
             eprintln!("⚠️  Pair Extraordinaire unavailable: {e}");
