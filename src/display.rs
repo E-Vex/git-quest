@@ -184,3 +184,153 @@ pub fn render_hunt(lang: &str, total: u64, issues: &[IssueItem], pal: Palette) -
     out.push('\n');
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::achievements::{AchievementDef, PAIR_EXTRAORDINAIRE, PULL_SHARK, STARSTRUCK};
+
+    fn plain() -> Palette {
+        Palette::new(false)
+    }
+
+    fn progress(def: &'static AchievementDef, current: u64) -> Progress {
+        Progress {
+            def,
+            current,
+            detail: None,
+        }
+    }
+
+    fn issue(n: u64) -> IssueItem {
+        IssueItem {
+            title: format!("Issue {n}"),
+            url: format!("https://github.com/o/r/issues/{n}"),
+            repo: "o/r".into(),
+            comments: 3,
+            reactions: 7,
+            created_at: "2024-05-06T07:08:09Z".into(),
+        }
+    }
+
+    #[test]
+    fn bar_is_empty_at_zero_and_full_at_one() {
+        assert_eq!(bar(0.0), "░".repeat(BAR_WIDTH));
+        assert_eq!(bar(1.0), "█".repeat(BAR_WIDTH));
+    }
+
+    #[test]
+    fn bar_always_has_constant_width() {
+        for frac in [0.0, 0.04, 0.25, 0.5, 0.96, 1.0] {
+            assert_eq!(bar(frac).chars().count(), BAR_WIDTH, "frac {frac}");
+        }
+    }
+
+    #[test]
+    fn bar_rounds_to_the_nearest_cell() {
+        assert_eq!(bar(0.5).matches('█').count(), 6);
+        assert_eq!(bar(0.04).matches('█').count(), 0);
+        assert_eq!(bar(0.96).matches('█').count(), 12);
+    }
+
+    #[test]
+    fn plain_output_contains_no_escape_sequences() {
+        let items = [progress(&PULL_SHARK, 72)];
+        assert!(!render_check("octocat", &items, false, plain()).contains('\x1b'));
+        assert!(!render_hunt("rust", 1, &[issue(1)], plain()).contains('\x1b'));
+    }
+
+    #[test]
+    fn colored_output_emits_escape_sequences() {
+        let items = [progress(&PULL_SHARK, 72)];
+        assert!(render_check("octocat", &items, false, Palette::new(true)).contains("\x1b["));
+    }
+
+    #[test]
+    fn check_shows_next_tier_and_remaining_count() {
+        let items = [progress(&PULL_SHARK, 72)];
+        let out = render_check("octocat", &items, true, plain());
+        assert!(out.contains("Achievement progress for octocat"));
+        assert!(out.contains("Pull Shark"));
+        assert!(out.contains("72/128 to Silver"));
+        assert!(out.contains("56 merged PRs remaining"));
+    }
+
+    #[test]
+    fn check_calls_the_first_level_unlock() {
+        let items = [progress(&STARSTRUCK, 0)];
+        let out = render_check("octocat", &items, true, plain());
+        assert!(out.contains("0/16 to unlock"), "{out}");
+    }
+
+    #[test]
+    fn check_reports_gold_as_complete() {
+        let items = [progress(&PULL_SHARK, 5000)];
+        let out = render_check("octocat", &items, true, plain());
+        assert!(out.contains("GOLD COMPLETE"));
+        assert!(out.contains("every tier achieved"));
+    }
+
+    #[test]
+    fn check_prints_the_detail_next_to_the_remaining_count() {
+        let items = [Progress {
+            detail: Some("best repo: octocat/hello".into()),
+            ..progress(&STARSTRUCK, 4)
+        }];
+        let out = render_check("octocat", &items, true, plain());
+        assert!(out.contains("12 stars remaining · best repo: octocat/hello"));
+    }
+
+    #[test]
+    fn check_hints_at_a_token_only_when_there_is_none() {
+        let items = [progress(&PULL_SHARK, 1)];
+        assert!(render_check("o", &items, false, plain()).contains("GITHUB_TOKEN"));
+        assert!(!render_check("o", &items, true, plain()).contains("GITHUB_TOKEN"));
+    }
+
+    #[test]
+    fn check_renders_every_item_on_its_own_line() {
+        let items = [
+            progress(&PULL_SHARK, 1),
+            progress(&STARSTRUCK, 1),
+            progress(&PAIR_EXTRAORDINAIRE, 1),
+        ];
+        let out = render_check("o", &items, true, plain());
+        for name in ["Pull Shark", "Starstruck", "Pair Extraordinaire"] {
+            assert_eq!(
+                out.lines().filter(|l| l.contains(name)).count(),
+                1,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn hunt_without_results_says_so() {
+        let out = render_hunt("rust", 0, &[], plain());
+        assert!(out.contains("good first issues for `rust`"));
+        assert!(out.contains("No open `good first issue` tasks found"));
+    }
+
+    #[test]
+    fn hunt_numbers_issues_and_summarises_the_total() {
+        let out = render_hunt("rust", 42, &[issue(1), issue(2)], plain());
+        assert!(out.contains(" 1. Issue 1"));
+        assert!(out.contains(" 2. Issue 2"));
+        assert!(out.contains("📦 o/r"));
+        assert!(out.contains("👍 7"));
+        assert!(out.contains("💬 3"));
+        assert!(out.contains("📅 2024-05-06"));
+        assert!(out.contains("https://github.com/o/r/issues/1"));
+        assert!(out.contains("42 open issues match — showing top 2"));
+    }
+
+    #[test]
+    fn hunt_tolerates_malformed_timestamps() {
+        for created_at in ["", "2024", "é"] {
+            let mut it = issue(1);
+            it.created_at = created_at.into();
+            let _ = render_hunt("rust", 1, &[it], plain());
+        }
+    }
+}
