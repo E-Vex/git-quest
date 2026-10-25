@@ -178,10 +178,15 @@ pub fn format_wait(wait: Duration) -> String {
     let secs = wait.as_secs();
     if secs < 60 {
         format!("{secs}s")
-    } else if secs < 3600 {
-        format!("{} min", secs.div_ceil(60))
     } else {
-        format!("{}h {:02}min", secs / 3600, (secs % 3600).div_ceil(60) % 60)
+        let total_mins = secs.div_ceil(60);
+        if total_mins < 60 {
+            format!("{total_mins} min")
+        } else {
+            let hours = total_mins / 60;
+            let mins = total_mins % 60;
+            format!("{}h {:02}min", hours, mins)
+        }
     }
 }
 
