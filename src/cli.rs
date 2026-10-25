@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 /// Track your progress toward achievements like Pull Shark and
 /// Starstruck, and hunt good first issues matching your stack.
 #[derive(Parser)]
-#[command(name = "git-quest", version, about, long_about = None)]
+#[command(name = "git-quest", version, about, long_about = None, propagate_version = true)]
 pub struct Cli {
     /// When to colorize output
     #[arg(long, global = true, value_enum, default_value_t = ColorWhen::Auto)]
