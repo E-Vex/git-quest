@@ -79,6 +79,10 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool) {
                 "🏆 every tier achieved".to_string(),
             ),
         };
+        let remaining = match &p.detail {
+            Some(detail) => format!("{remaining} · {detail}"),
+            None => remaining,
+        };
         println!(
             "{} {}  {:<18}{}  {}",
             p.def.emoji,

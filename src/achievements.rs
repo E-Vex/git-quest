@@ -76,6 +76,9 @@ pub const PAIR_EXTRAORDINAIRE: AchievementDef = AchievementDef {
 pub struct Progress {
     pub def: &'static AchievementDef,
     pub current: u64,
+    /// Optional context shown next to the progress line, e.g. which
+    /// repository produced the Starstruck count.
+    pub detail: Option<String>,
 }
 
 impl Progress {
@@ -117,7 +120,11 @@ mod tests {
     };
 
     fn progress(current: u64) -> Progress {
-        Progress { def: &DEF, current }
+        Progress {
+            def: &DEF,
+            current,
+            detail: None,
+        }
     }
 
     #[test]

@@ -13,7 +13,10 @@ pub async fn run(username: &str) -> Result<()> {
         client.coauthored_commit_count(username),
     );
     let prs = prs?;
-    let stars = stars?.map_or(0, |(_, stars)| stars);
+    let (star_repo, stars) = match stars? {
+        Some((repo, stars)) => (Some(repo), stars),
+        None => (None, 0),
+    };
     let answers = match answers {
         Ok(v) => v,
         Err(e) => {
@@ -33,22 +36,26 @@ pub async fn run(username: &str) -> Result<()> {
         Progress {
             def: &PULL_SHARK,
             current: prs,
+            detail: None,
         },
         Progress {
             def: &STARSTRUCK,
             current: stars,
+            detail: star_repo.map(|repo| format!("best repo: {repo}")),
         },
     ];
     if let Some(a) = answers {
         items.push(Progress {
             def: &GALAXY_BRAIN,
             current: a,
+            detail: None,
         });
     }
     if let Some(c) = coauthored {
         items.push(Progress {
             def: &PAIR_EXTRAORDINAIRE,
             current: c,
+            detail: None,
         });
     }
 
