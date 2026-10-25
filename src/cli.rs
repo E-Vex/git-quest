@@ -16,6 +16,7 @@ pub enum Command {
     /// Check a GitHub user's achievement progress
     Check {
         /// GitHub username to analyze (e.g. octocat)
+        #[arg(value_parser = crate::validate::username)]
         username: String,
     },
     /// Hunt for open `good first issue` tasks matching your stack

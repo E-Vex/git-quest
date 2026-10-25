@@ -4,6 +4,7 @@ mod cli;
 mod display;
 mod github;
 mod hunt;
+mod validate;
 
 use clap::Parser;
 
