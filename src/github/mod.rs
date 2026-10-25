@@ -331,6 +331,7 @@ impl GithubClient {
         &self,
         lang: &str,
         limit: u8,
+        label: &str,
         sort: &str,
     ) -> Result<(u64, Vec<IssueItem>)> {
         #[derive(Deserialize)]
@@ -354,7 +355,7 @@ impl GithubClient {
             total_count: u64,
         }
 
-        let q = issue_query(lang);
+        let q = issue_query(lang, label);
         let r: R = self
             .send(
                 self.http
@@ -396,8 +397,8 @@ impl GithubClient {
 ///
 /// The language is quoted so multi-word names such as `Jupyter Notebook`
 /// stay a single qualifier value.
-fn issue_query(lang: &str) -> String {
-    format!("label:\"good first issue\" state:open language:\"{lang}\" no:assignee")
+fn issue_query(lang: &str, label: &str) -> String {
+    format!("label:\"{label}\" state:open language:\"{lang}\" no:assignee")
 }
 
 /// A single issue found by `hunt`.

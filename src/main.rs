@@ -15,7 +15,7 @@ async fn main() -> ExitCode {
     let pal = display::Palette::resolve(cli.color);
     let result = match cli.command {
         cli::Command::Check { username } => check::run(&username, pal).await,
-        cli::Command::Hunt { lang, limit, sort } => hunt::run(&lang, limit, &sort, pal).await,
+        cli::Command::Hunt { lang, limit, label, sort } => hunt::run(&lang, limit, &label, &sort, pal).await,
     };
 
     match result {

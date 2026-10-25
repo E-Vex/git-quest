@@ -5,6 +5,8 @@
 const MAX_USERNAME_LEN: usize = 39;
 /// Generous upper bound for a language name ("Jupyter Notebook" is 16).
 const MAX_LANGUAGE_LEN: usize = 50;
+/// Generous upper bound for a label name ("help wanted" is 12).
+const MAX_LABEL_LEN: usize = 50;
 
 /// Normalise and validate a GitHub username.
 ///
@@ -45,6 +47,24 @@ pub fn username(input: &str) -> Result<String, String> {
 /// Spaces and symbols are fine (`C++`, `C#`, `Jupyter Notebook`); control
 /// characters and double quotes are not, because the value is wrapped in
 /// quotes and a stray quote would end the qualifier early.
+/// Validate a label name for use in a `label:"…"` search qualifier.
+pub fn label(input: &str) -> Result<String, String> {
+    let label_str = input.trim();
+
+    if label_str.is_empty() {
+        return Err("label must not be empty".into());
+    }
+    if label_str.chars().count() > MAX_LABEL_LEN {
+        return Err(format!(
+            "label name is too long (max {MAX_LABEL_LEN} characters)"
+        ));
+    }
+    if let Some(c) = label_str.chars().find(|c| c.is_control() || *c == '"') {
+        return Err(format!("invalid character {c:?} in label name"));
+    }
+    Ok(label_str.to_string())
+}
+
 pub fn language(input: &str) -> Result<String, String> {
     let lang = input.trim();
 

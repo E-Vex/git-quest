@@ -163,20 +163,20 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Pa
 }
 
 /// Render the `hunt` command results.
-pub fn render_hunt(lang: &str, total: u64, issues: &[IssueItem], pal: Palette) -> String {
+pub fn render_hunt(lang: &str, label: &str, total: u64, issues: &[IssueItem], pal: Palette) -> String {
     let mut out = String::new();
     out.push('\n');
     let _ = writeln!(
         out,
         "{}",
-        pal.bold(format!("🎯 Hunt — good first issues for `{lang}`"))
+        pal.bold(format!("🎯 Hunt — `{label}` tasks for `{lang}`"))
     );
     out.push('\n');
     if issues.is_empty() {
         let _ = writeln!(
             out,
             "{}",
-            pal.dim("No open `good first issue` tasks found for this language.")
+            pal.dim("No open tasks found for this label and language.")
         );
         out.push('\n');
         return out;
@@ -264,7 +264,7 @@ mod tests {
     fn plain_output_contains_no_escape_sequences() {
         let items = [progress(&PULL_SHARK, 72)];
         assert!(!render_check("octocat", &items, false, plain()).contains('\x1b'));
-        assert!(!render_hunt("rust", 1, &[issue(1)], plain()).contains('\x1b'));
+        assert!(!render_hunt("rust", "good first issue", 1, &[issue(1)], plain()).contains('\x1b'));
     }
 
     #[test]
@@ -334,14 +334,14 @@ mod tests {
 
     #[test]
     fn hunt_without_results_says_so() {
-        let out = render_hunt("rust", 0, &[], plain());
-        assert!(out.contains("good first issues for `rust`"));
-        assert!(out.contains("No open `good first issue` tasks found"));
+        let out = render_hunt("rust", "good first issue", 0, &[], plain());
+        assert!(out.contains("`good first issue` tasks for `rust`"));
+        assert!(out.contains("No open tasks found"));
     }
 
     #[test]
     fn hunt_numbers_issues_and_summarises_the_total() {
-        let out = render_hunt("rust", 42, &[issue(1), issue(2)], plain());
+        let out = render_hunt("rust", "good first issue", 42, &[issue(1), issue(2)], plain());
         assert!(out.contains(" 1. Issue 1"));
         assert!(out.contains(" 2. Issue 2"));
         assert!(out.contains("📦 o/r"));
@@ -357,7 +357,7 @@ mod tests {
         for created_at in ["", "2024", "é"] {
             let mut it = issue(1);
             it.created_at = created_at.into();
-            let _ = render_hunt("rust", 1, &[it], plain());
+            let _ = render_hunt("rust", "good first issue", 1, &[it], plain());
         }
     }
 
@@ -391,8 +391,8 @@ mod tests {
         let plain_out = render_check("octocat", &items, false, plain());
         assert_eq!(strip_ansi(&colored), plain_out);
 
-        let colored = render_hunt("rust", 2, &[issue(1), issue(2)], Palette::new(true));
-        let plain_out = render_hunt("rust", 2, &[issue(1), issue(2)], plain());
+        let colored = render_hunt("rust", "good first issue", 2, &[issue(1), issue(2)], Palette::new(true));
+        let plain_out = render_hunt("rust", "good first issue", 2, &[issue(1), issue(2)], plain());
         assert_eq!(strip_ansi(&colored), plain_out);
     }
 

@@ -47,6 +47,9 @@ pub enum Command {
             value_parser = clap::value_parser!(u8).range(1..=100)
         )]
         limit: u8,
+        /// Label to filter by (e.g. good first issue, help wanted)
+        #[arg(long, value_parser = crate::validate::label, default_value = "good first issue")]
+        label: String,
         /// Sort results by community validation or freshness
         #[arg(short = 's', long, value_enum, default_value_t = SortBy::Reactions)]
         sort: SortBy,
