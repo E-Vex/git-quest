@@ -38,6 +38,9 @@ pub fn username(input: &str) -> Result<String, String> {
     if name.starts_with('-') || name.ends_with('-') {
         return Err("username cannot start or end with a hyphen".into());
     }
+    if name.contains("--") {
+        return Err("username cannot contain consecutive hyphens".into());
+    }
     Ok(name.to_string())
 }
 
@@ -117,6 +120,14 @@ mod tests {
     fn rejects_hyphens_at_the_edges() {
         assert!(username("-octocat").is_err());
         assert!(username("octocat-").is_err());
+    }
+
+    #[test]
+    fn rejects_consecutive_hyphens() {
+        assert!(username("octo--cat").is_err());
+        assert!(username("a--b").is_err());
+        assert!(username("octocat").is_ok()); // single hyphen is fine
+        assert!(username("octo-cat").is_ok());
     }
 
     #[test]
