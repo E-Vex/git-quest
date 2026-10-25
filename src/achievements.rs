@@ -104,3 +104,88 @@ impl Progress {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DEF: AchievementDef = AchievementDef {
+        emoji: "T",
+        name: "Test",
+        unit: "things",
+        tiers: [2, 16, 128, 1024],
+    };
+
+    fn progress(current: u64) -> Progress {
+        Progress { def: &DEF, current }
+    }
+
+    #[test]
+    fn starts_at_the_default_tier() {
+        let p = progress(0);
+        assert_eq!(p.next_tier(), Some((Tier::Default, 2)));
+        assert_eq!(p.remaining(), 2);
+        assert_eq!(p.fraction(), 0.0);
+    }
+
+    #[test]
+    fn just_below_a_threshold_keeps_the_same_target() {
+        let p = progress(15);
+        assert_eq!(p.next_tier(), Some((Tier::Bronze, 16)));
+        assert_eq!(p.remaining(), 1);
+    }
+
+    #[test]
+    fn reaching_a_threshold_advances_to_the_next_tier() {
+        assert_eq!(progress(2).next_tier(), Some((Tier::Bronze, 16)));
+        assert_eq!(progress(16).next_tier(), Some((Tier::Silver, 128)));
+        assert_eq!(progress(128).next_tier(), Some((Tier::Gold, 1024)));
+    }
+
+    #[test]
+    fn gold_is_terminal() {
+        for current in [1024, 1025, u64::MAX] {
+            let p = progress(current);
+            assert_eq!(p.next_tier(), None);
+            assert_eq!(p.remaining(), 0);
+            assert_eq!(p.fraction(), 1.0);
+        }
+    }
+
+    #[test]
+    fn fraction_is_relative_to_the_next_threshold() {
+        assert_eq!(progress(8).fraction(), 0.5);
+        assert_eq!(progress(64).fraction(), 0.5);
+    }
+
+    #[test]
+    fn fraction_never_leaves_unit_range() {
+        for current in [0, 1, 2, 15, 16, 127, 128, 1023, 1024, 5000] {
+            let f = progress(current).fraction();
+            assert!((0.0..=1.0).contains(&f), "{current} -> {f}");
+        }
+    }
+
+    #[test]
+    fn real_definitions_have_strictly_increasing_tiers() {
+        for def in [
+            &PULL_SHARK,
+            &STARSTRUCK,
+            &GALAXY_BRAIN,
+            &PAIR_EXTRAORDINAIRE,
+        ] {
+            assert!(
+                def.tiers.windows(2).all(|w| w[0] < w[1]),
+                "{} tiers are not strictly increasing: {:?}",
+                def.name,
+                def.tiers
+            );
+        }
+    }
+
+    #[test]
+    fn tier_names_are_displayed() {
+        let names: Vec<String> = Tier::ALL.iter().map(|t| t.to_string()).collect();
+        assert_eq!(names, ["Default", "Bronze", "Silver", "Gold"]);
+    }
+}
