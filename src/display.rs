@@ -110,10 +110,12 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Pa
         };
         let _ = writeln!(
             out,
-            "{} {}  {:<18}{}  {}",
+            "{} {}  {}{}  {}",
             p.def.emoji,
             name,
-            pal.paint(status, frac),
+            // Pad *before* coloring: width specifiers count the invisible
+            // ANSI escape bytes, which collapsed the gap before the bar.
+            pal.paint(format!("{status:<18}"), frac),
             pal.paint(bar(frac), frac),
             pal.dim(remaining)
         );
@@ -332,5 +334,40 @@ mod tests {
             it.created_at = created_at.into();
             let _ = render_hunt("rust", 1, &[it], plain());
         }
+    }
+
+    /// Remove SGR escape sequences (`ESC [ … m`).
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::new();
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for d in chars.by_ref() {
+                    if d == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn colors_never_change_the_layout() {
+        let items = [
+            progress(&PULL_SHARK, 72),
+            progress(&STARSTRUCK, 0),
+            progress(&PAIR_EXTRAORDINAIRE, 4),
+            progress(&PULL_SHARK, 5000),
+        ];
+        let colored = render_check("octocat", &items, false, Palette::new(true));
+        let plain_out = render_check("octocat", &items, false, plain());
+        assert_eq!(strip_ansi(&colored), plain_out);
+
+        let colored = render_hunt("rust", 2, &[issue(1), issue(2)], Palette::new(true));
+        let plain_out = render_hunt("rust", 2, &[issue(1), issue(2)], plain());
+        assert_eq!(strip_ansi(&colored), plain_out);
     }
 }
