@@ -435,7 +435,9 @@ mod tests {
         assert_eq!(format_wait(Duration::from_secs(45)), "45s");
         assert_eq!(format_wait(Duration::from_secs(60)), "1 min");
         assert_eq!(format_wait(Duration::from_secs(61)), "2 min");
-        assert_eq!(format_wait(Duration::from_secs(3599)), "60 min");
+        // 3599s rounds up to a full hour, so it must use the `h` form.
+        assert_eq!(format_wait(Duration::from_secs(3599)), "1h 00min");
+        assert_eq!(format_wait(Duration::from_secs(3540)), "59 min");
         assert_eq!(format_wait(Duration::from_secs(3600)), "1h 00min");
         assert_eq!(format_wait(Duration::from_secs(3600 + 5 * 60)), "1h 05min");
     }
