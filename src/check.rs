@@ -92,11 +92,15 @@ pub async fn run(username: &str, pal: Palette, json: bool) -> Result<()> {
                 "detail": p.detail,
             })
         }).collect();
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "username": username,
-            "has_token": client.has_token(),
-            "achievements": achievements,
-        })).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "username": username,
+                "has_token": client.has_token(),
+                "achievements": achievements,
+            }))
+            .unwrap()
+        );
     } else {
         print!(
             "{}",

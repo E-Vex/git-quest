@@ -23,9 +23,18 @@ async fn main() -> ExitCode {
             generate(shell_type, &mut cmd, name, &mut std::io::stdout());
             Ok(())
         }
-        cli::Command::Readme { username } => readme::run(username.as_deref().unwrap_or(""), pal).await,
-        cli::Command::Check { username } => check::run(username.as_deref().unwrap_or(""), pal, cli.json).await,
-        cli::Command::Hunt { lang, limit, label, sort } => hunt::run(&lang, limit, &label, &sort, pal, cli.json).await,
+        cli::Command::Readme { username } => {
+            readme::run(username.as_deref().unwrap_or(""), pal).await
+        }
+        cli::Command::Check { username } => {
+            check::run(username.as_deref().unwrap_or(""), pal, cli.json).await
+        }
+        cli::Command::Hunt {
+            lang,
+            limit,
+            label,
+            sort,
+        } => hunt::run(&lang, limit, &label, &sort, pal, cli.json).await,
     };
 
     match result {

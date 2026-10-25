@@ -287,7 +287,7 @@ async fn good_first_issues_sends_the_expected_query_and_maps_items() {
         .await;
 
     let (total, issues) = client_for(&server, None)
-        .good_first_issues("rust", 2, "reactions-+1")
+        .good_first_issues("rust", 2, "good first issue", "reactions-+1")
         .await
         .unwrap();
 

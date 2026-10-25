@@ -156,9 +156,7 @@ impl GithubClient {
     /// Resolve the username of the authenticated user from the token.
     /// Returns `None` when no token is configured or the request fails.
     pub async fn authenticated_user(&self) -> Option<String> {
-        if self.token.is_none() {
-            return None;
-        }
+        self.token.as_ref()?;
         #[derive(Deserialize)]
         struct User {
             login: String,
@@ -476,14 +474,14 @@ mod tests {
     #[test]
     fn issue_query_quotes_the_language() {
         assert_eq!(
-            issue_query("rust"),
+            issue_query("rust", "good first issue"),
             r#"label:"good first issue" state:open language:"rust" no:assignee"#
         );
     }
 
     #[test]
     fn issue_query_keeps_multi_word_languages_together() {
-        assert!(issue_query("Jupyter Notebook").contains(r#"language:"Jupyter Notebook""#));
+        assert!(issue_query("Jupyter Notebook", "good first issue").contains(r#"language:"Jupyter Notebook""#));
     }
 }
 

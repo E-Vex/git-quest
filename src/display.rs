@@ -174,14 +174,24 @@ pub fn render_readme(_username: &str, items: &[Progress], _pal: Palette) -> Stri
         let (status, remaining_text) = match p.next_tier() {
             Some((tier, threshold)) => {
                 let remaining = p.remaining();
-                let rem_str = if remaining == 0 { "complete".to_string() } else { format!("{remaining} remaining") };
+                let rem_str = if remaining == 0 {
+                    "complete".to_string()
+                } else {
+                    format!("{remaining} remaining")
+                };
                 let tier_str = match tier {
                     Tier::Default => format!("{} to unlock", threshold),
                     _ => format!("{} to {}", threshold, tier),
                 };
-                (format!("{}/{} to {}", p.current, threshold, tier_str), rem_str)
+                (
+                    format!("{}/{} to {}", p.current, threshold, tier_str),
+                    rem_str,
+                )
             }
-            None => ("GOLD COMPLETE".to_string(), "🏆 every tier achieved".to_string()),
+            None => (
+                "GOLD COMPLETE".to_string(),
+                "🏆 every tier achieved".to_string(),
+            ),
         };
         let detail_str = p.detail.as_deref().unwrap_or("");
         let detail_part = if detail_str.is_empty() {
@@ -194,7 +204,7 @@ pub fn render_readme(_username: &str, items: &[Progress], _pal: Palette) -> Stri
             p.def.emoji,
             name,
             p.current,
-            p.def.tiers.get(0).copied().unwrap_or(0),
+            p.def.tiers.first().copied().unwrap_or(0),
             status,
             bar_str,
             remaining_text,
@@ -206,7 +216,13 @@ pub fn render_readme(_username: &str, items: &[Progress], _pal: Palette) -> Stri
 }
 
 /// Render the `hunt` command results.
-pub fn render_hunt(lang: &str, label: &str, total: u64, issues: &[IssueItem], pal: Palette) -> String {
+pub fn render_hunt(
+    lang: &str,
+    label: &str,
+    total: u64,
+    issues: &[IssueItem],
+    pal: Palette,
+) -> String {
     let mut out = String::new();
     out.push('\n');
     let _ = writeln!(
@@ -384,7 +400,13 @@ mod tests {
 
     #[test]
     fn hunt_numbers_issues_and_summarises_the_total() {
-        let out = render_hunt("rust", "good first issue", 42, &[issue(1), issue(2)], plain());
+        let out = render_hunt(
+            "rust",
+            "good first issue",
+            42,
+            &[issue(1), issue(2)],
+            plain(),
+        );
         assert!(out.contains(" 1. Issue 1"));
         assert!(out.contains(" 2. Issue 2"));
         assert!(out.contains("📦 o/r"));
@@ -434,8 +456,20 @@ mod tests {
         let plain_out = render_check("octocat", &items, false, plain());
         assert_eq!(strip_ansi(&colored), plain_out);
 
-        let colored = render_hunt("rust", "good first issue", 2, &[issue(1), issue(2)], Palette::new(true));
-        let plain_out = render_hunt("rust", "good first issue", 2, &[issue(1), issue(2)], plain());
+        let colored = render_hunt(
+            "rust",
+            "good first issue",
+            2,
+            &[issue(1), issue(2)],
+            Palette::new(true),
+        );
+        let plain_out = render_hunt(
+            "rust",
+            "good first issue",
+            2,
+            &[issue(1), issue(2)],
+            plain(),
+        );
         assert_eq!(strip_ansi(&colored), plain_out);
     }
 
