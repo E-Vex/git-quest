@@ -50,10 +50,10 @@ git-quest check <username>
 ```text
 Achievement progress for E-Vex
 
-🦈 Pull Shark           66/124 to Silver  ██████░░░░░░  58 merged PRs remaining
-⭐ Starstruck           13/16 to Bronze   ██████████░░  3 stars remaining
-🧠 Galaxy Brain         0/2 to Bronze     ░░░░░░░░░░░░  2 accepted answers remaining
-👥 Pair Extraordinaire  4/10 to Silver    █████░░░░░░░  6 co-authored commits remaining
+🦈 Pull Shark           66/128 to Silver  ██████░░░░░░  62 merged PRs remaining
+⭐ Starstruck           13/128 to Silver   ██████████░░  115 stars remaining (best repo: E-Vex/git-quest)
+🧠 Galaxy Brain         0/2 to unlock     ░░░░░░░░░░░░  2 accepted answers remaining
+👥 Pair Extraordinaire  4/10 to Bronze    █████░░░░░░░  6 co-authored commits remaining
 ```
 
 ### `hunt` — find your next contribution
@@ -74,12 +74,12 @@ git-quest hunt --lang python --sort created # freshest first
 
 ## Achievements tracked
 
-| Achievement | Measures | Bronze | Silver | Gold |
-|---|---|---:|---:|---:|
-| 🦈 Pull Shark | merged pull requests you authored | 16 | 124 | 620 |
-| ⭐ Starstruck | stars across repositories you own | 16 | 128 | 512 |
-| 🧠 Galaxy Brain | accepted answers in Discussions | 2 | 8 | 16 |
-| 👥 Pair Extraordinaire | commits co-authored with someone else | 1 | 10 | 20 |
+| Achievement | Measures | Default | Bronze | Silver | Gold |
+|---|---|---:|---:|---:|---:|
+| 🦈 Pull Shark | merged pull requests you authored | 2 | 16 | 128 | 1024 |
+| ⭐ Starstruck | highest star count on a single repository you own | 16 | 128 | 512 | 4096 |
+| 🧠 Galaxy Brain | accepted answers in Discussions | 2 | 8 | 16 | 32 |
+| 👥 Pair Extraordinaire | commits co-authored with someone else | 1 | 10 | 24 | 48 |
 
 ## Authentication (optional, recommended)
 
@@ -95,7 +95,7 @@ No scopes needed for public data — leave every checkbox unchecked.
 ## How it counts
 
 - **Pull Shark** — GitHub Search: `is:merged type:pr author:<you>`
-- **Starstruck** — sum of `stargazers_count` across repositories you own
+- **Starstruck** — highest `stargazers_count` on any single repository you own
 - **Galaxy Brain** — GraphQL: `repositoryDiscussionComments(onlyAnswers: true)`
 - **Pair Extraordinaire** — commit search for commits you authored that carry a
   `Co-Authored-By:` trailer (an approximation of GitHub's internal count)
