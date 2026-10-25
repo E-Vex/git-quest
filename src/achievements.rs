@@ -1,3 +1,33 @@
+use std::fmt;
+
+/// A badge tier above the base level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tier {
+    Bronze,
+    Silver,
+    Gold,
+}
+
+impl Tier {
+    /// Tiers in ascending order of difficulty.
+    pub const ALL: [Tier; 3] = [Tier::Bronze, Tier::Silver, Tier::Gold];
+
+    /// Human-readable tier name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Tier::Bronze => "Bronze",
+            Tier::Silver => "Silver",
+            Tier::Gold => "Gold",
+        }
+    }
+}
+
+impl fmt::Display for Tier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
 /// Static definition of a GitHub profile achievement.
 pub struct AchievementDef {
     pub emoji: &'static str,
@@ -43,19 +73,13 @@ pub struct Progress {
 }
 
 impl Progress {
-    /// The next tier not yet reached: `(tier name, threshold)`.
+    /// The next tier not yet reached: `(tier, threshold)`.
     /// `None` means Gold is complete.
-    pub fn next_tier(&self) -> Option<(&'static str, u64)> {
-        for (name, threshold) in [
-            ("Bronze", self.def.tiers[0]),
-            ("Silver", self.def.tiers[1]),
-            ("Gold", self.def.tiers[2]),
-        ] {
-            if self.current < threshold {
-                return Some((name, threshold));
-            }
-        }
-        None
+    pub fn next_tier(&self) -> Option<(Tier, u64)> {
+        Tier::ALL
+            .into_iter()
+            .zip(self.def.tiers)
+            .find(|&(_, threshold)| self.current < threshold)
     }
 
     /// Remaining count to the next tier (0 when all tiers are done).
