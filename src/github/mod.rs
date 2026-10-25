@@ -402,6 +402,7 @@ fn issue_query(lang: &str, label: &str) -> String {
 }
 
 /// A single issue found by `hunt`.
+#[derive(serde::Serialize)]
 pub struct IssueItem {
     pub title: String,
     pub url: String,

@@ -10,6 +10,9 @@ pub struct Cli {
     /// When to colorize output
     #[arg(long, global = true, value_enum, default_value_t = ColorWhen::Auto)]
     pub color: ColorWhen,
+    /// Output raw JSON instead of formatted text
+    #[arg(long, global = true)]
+    pub json: bool,
 
     #[command(subcommand)]
     pub command: Command,

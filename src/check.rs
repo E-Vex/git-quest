@@ -3,7 +3,7 @@ use crate::display::{self, Palette};
 use crate::github::GithubClient;
 use anyhow::Result;
 
-pub async fn run(username: &str, pal: Palette) -> Result<()> {
+pub async fn run(username: &str, pal: Palette, json: bool) -> Result<()> {
     let client = GithubClient::new()?;
 
     let (prs, stars, answers, coauthored) = tokio::join!(
@@ -59,9 +59,28 @@ pub async fn run(username: &str, pal: Palette) -> Result<()> {
         });
     }
 
-    print!(
-        "{}",
-        display::render_check(username, &items, client.has_token(), pal)
-    );
+    if json {
+        let achievements: Vec<_> = items.iter().map(|p| {
+            serde_json::json!({
+                "name": p.def.name,
+                "emoji": p.def.emoji,
+                "current": p.current,
+                "next_tier": p.next_tier().map(|(t, th)| serde_json::json!({"tier": t.name(), "threshold": th})),
+                "remaining": p.remaining(),
+                "fraction": p.fraction(),
+                "detail": p.detail,
+            })
+        }).collect();
+        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+            "username": username,
+            "has_token": client.has_token(),
+            "achievements": achievements,
+        })).unwrap());
+    } else {
+        print!(
+            "{}",
+            display::render_check(username, &items, client.has_token(), pal)
+        );
+    }
     Ok(())
 }
