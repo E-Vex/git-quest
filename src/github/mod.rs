@@ -431,6 +431,9 @@ mod tests {
 }
 
 #[cfg(test)]
+mod client_tests;
+
+#[cfg(test)]
 mod config_tests {
     use super::*;
     use std::collections::HashMap;
