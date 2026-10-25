@@ -8,12 +8,12 @@ pub async fn run(username: &str) -> Result<()> {
 
     let (prs, stars, answers, coauthored) = tokio::join!(
         client.merged_pr_count(username),
-        client.total_stars(username),
+        client.top_repo_stars(username),
         client.accepted_discussion_answers(username),
         client.coauthored_commit_count(username),
     );
     let prs = prs?;
-    let stars = stars?;
+    let stars = stars?.map_or(0, |(_, stars)| stars);
     let answers = match answers {
         Ok(v) => v,
         Err(e) => {

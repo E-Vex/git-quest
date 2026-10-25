@@ -102,13 +102,19 @@ impl GithubClient {
         Ok(r.total_count)
     }
 
-    /// Starstruck — total stars across repositories owned by `username`.
-    pub async fn total_stars(&self, username: &str) -> Result<u64> {
+    /// Starstruck — the single most-starred repository owned by
+    /// `username`, as `(full_name, stars)`.
+    ///
+    /// The achievement is awarded when *one* repository reaches a star
+    /// count, so summing stars across repositories would overcount.
+    /// Returns `None` when the user owns no repositories.
+    pub async fn top_repo_stars(&self, username: &str) -> Result<Option<(String, u64)>> {
         #[derive(Deserialize)]
         struct Repo {
+            full_name: String,
             stargazers_count: u64,
         }
-        let mut total: u64 = 0;
+        let mut best: Option<(String, u64)> = None;
         let mut page: u32 = 1;
         loop {
             let repos: Vec<Repo> = self
@@ -124,13 +130,20 @@ impl GithubClient {
                 )
                 .await?;
             let n = repos.len();
-            total += repos.iter().map(|r| r.stargazers_count).sum::<u64>();
+            for repo in repos {
+                if best
+                    .as_ref()
+                    .is_none_or(|(_, s)| repo.stargazers_count > *s)
+                {
+                    best = Some((repo.full_name, repo.stargazers_count));
+                }
+            }
             if n < 100 || page >= 30 {
                 break;
             }
             page += 1;
         }
-        Ok(total)
+        Ok(best)
     }
 
     /// Galaxy Brain — accepted answers in Discussions (GraphQL).
