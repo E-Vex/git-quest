@@ -9,13 +9,37 @@ mod error;
 pub use error::ApiError;
 use error::{classify, parse_error_body};
 
-const REST_BASE: &str = "https://api.github.com";
-const GRAPHQL_URL: &str = "https://api.github.com/graphql";
+const DEFAULT_REST_BASE: &str = "https://api.github.com";
 
 /// Fail fast on unreachable networks instead of hanging the terminal.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Upper bound for a whole request, including reading the body.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Where and how to talk to GitHub.
+pub struct ClientConfig {
+    /// Personal access token, if any.
+    pub token: Option<String>,
+    /// REST API root without a trailing slash.
+    pub rest_base: String,
+    /// GraphQL endpoint.
+    pub graphql_url: String,
+}
+
+impl ClientConfig {
+    /// Read the configuration from the environment (`GITHUB_TOKEN`).
+    pub fn from_env() -> Self {
+        let token = std::env::var("GITHUB_TOKEN")
+            .ok()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+        Self {
+            token,
+            rest_base: DEFAULT_REST_BASE.to_string(),
+            graphql_url: format!("{DEFAULT_REST_BASE}/graphql"),
+        }
+    }
+}
 
 /// A thin GitHub REST/GraphQL client with optional token auth.
 ///
@@ -25,13 +49,23 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct GithubClient {
     http: reqwest::Client,
     token: Option<String>,
+    rest_base: String,
+    graphql_url: String,
 }
 
 impl GithubClient {
+    /// Build a client from the environment.
     pub fn new() -> Result<Self> {
-        let token = std::env::var("GITHUB_TOKEN")
-            .ok()
-            .filter(|t| !t.trim().is_empty());
+        Self::with_config(ClientConfig::from_env())
+    }
+
+    /// Build a client from an explicit configuration.
+    pub fn with_config(config: ClientConfig) -> Result<Self> {
+        let ClientConfig {
+            token,
+            rest_base,
+            graphql_url,
+        } = config;
 
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -53,7 +87,12 @@ impl GithubClient {
             .timeout(REQUEST_TIMEOUT)
             .build()?;
 
-        Ok(Self { http, token })
+        Ok(Self {
+            http,
+            token,
+            rest_base,
+            graphql_url,
+        })
     }
 
     /// Whether a token was found in the environment.
@@ -102,7 +141,7 @@ impl GithubClient {
         let r: R = self
             .send(
                 self.http
-                    .get(format!("{REST_BASE}/search/issues"))
+                    .get(format!("{}/search/issues", self.rest_base))
                     .query(&[("q", format!("is:merged type:pr author:{username}"))]),
                 "Pull Shark search",
             )
@@ -128,7 +167,7 @@ impl GithubClient {
             let repos: Vec<Repo> = self
                 .send(
                     self.http
-                        .get(format!("{REST_BASE}/users/{username}/repos"))
+                        .get(format!("{}/users/{username}/repos", self.rest_base))
                         .query(&[
                             ("per_page", "100".to_string()),
                             ("page", page.to_string()),
@@ -200,7 +239,7 @@ impl GithubClient {
 
         let resp: Resp = self
             .send(
-                self.http.post(GRAPHQL_URL).json(&body),
+                self.http.post(&self.graphql_url).json(&body),
                 "Galaxy Brain GraphQL",
             )
             .await?;
@@ -224,7 +263,7 @@ impl GithubClient {
         let r: R = self
             .send(
                 self.http
-                    .get(format!("{REST_BASE}/search/commits"))
+                    .get(format!("{}/search/commits", self.rest_base))
                     .query(&[("q", format!("author:{username} \"Co-Authored-By:\""))]),
                 "Pair Extraordinaire commit search",
             )
@@ -265,12 +304,14 @@ impl GithubClient {
         let q = issue_query(lang);
         let r: R = self
             .send(
-                self.http.get(format!("{REST_BASE}/search/issues")).query(&[
-                    ("q", q),
-                    ("sort", sort.to_string()),
-                    ("order", "desc".to_string()),
-                    ("per_page", limit.to_string()),
-                ]),
+                self.http
+                    .get(format!("{}/search/issues", self.rest_base))
+                    .query(&[
+                        ("q", q),
+                        ("sort", sort.to_string()),
+                        ("order", "desc".to_string()),
+                        ("per_page", limit.to_string()),
+                    ]),
                 "Hunt issue search",
             )
             .await?;
