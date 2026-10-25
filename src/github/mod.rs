@@ -173,8 +173,44 @@ impl GithubClient {
     }
 
     /// Send a request and decode JSON, mapping failures to a typed
-    /// [`ApiError`] with an actionable message.
+    /// [`ApiError`] with an actionable message. Retries up to 3 times
+    /// on network errors, timeouts and rate limits.
     async fn send<T: DeserializeOwned>(
+        &self,
+        req: reqwest::RequestBuilder,
+        what: &str,
+    ) -> Result<T, ApiError> {
+        const MAX_RETRIES: u32 = 3;
+        let mut last_err: Option<ApiError> = None;
+
+        for attempt in 0..=MAX_RETRIES {
+            let clone_result = req.try_clone();
+            let req_clone = clone_result.unwrap_or_else(|| req.try_clone().unwrap());
+            match self.attempt_send(req_clone, what).await {
+                Ok(val) => return Ok(val),
+                Err(err) => {
+                    let retryable = matches!(
+                        &err,
+                        ApiError::Network { timeout: true, .. }
+                            | ApiError::RateLimited { .. }
+                            | ApiError::SecondaryRateLimit { .. }
+                    );
+                    if !retryable || attempt == MAX_RETRIES {
+                        return Err(err);
+                    }
+                    last_err = Some(err);
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| ApiError::Network {
+            what: what.to_string(),
+            message: "unknown retry failure".to_string(),
+            timeout: false,
+        }))
+    }
+
+    async fn attempt_send<T: DeserializeOwned>(
         &self,
         req: reqwest::RequestBuilder,
         what: &str,
