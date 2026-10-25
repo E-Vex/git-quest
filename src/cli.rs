@@ -22,7 +22,7 @@ pub enum Command {
     /// Hunt for open `good first issue` tasks matching your stack
     Hunt {
         /// Programming language to filter by (e.g. rust, go, python)
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, value_parser = crate::validate::language)]
         lang: String,
         /// Maximum number of issues to show (1-100)
         #[arg(

@@ -3,6 +3,8 @@
 
 /// GitHub's maximum username length.
 const MAX_USERNAME_LEN: usize = 39;
+/// Generous upper bound for a language name ("Jupyter Notebook" is 16).
+const MAX_LANGUAGE_LEN: usize = 50;
 
 /// Normalise and validate a GitHub username.
 ///
@@ -35,6 +37,29 @@ pub fn username(input: &str) -> Result<String, String> {
         return Err("username cannot start or end with a hyphen".into());
     }
     Ok(name.to_string())
+}
+
+/// Validate a programming language name for use in a `language:"…"`
+/// search qualifier.
+///
+/// Spaces and symbols are fine (`C++`, `C#`, `Jupyter Notebook`); control
+/// characters and double quotes are not, because the value is wrapped in
+/// quotes and a stray quote would end the qualifier early.
+pub fn language(input: &str) -> Result<String, String> {
+    let lang = input.trim();
+
+    if lang.is_empty() {
+        return Err("language must not be empty".into());
+    }
+    if lang.chars().count() > MAX_LANGUAGE_LEN {
+        return Err(format!(
+            "language name is too long (max {MAX_LANGUAGE_LEN} characters)"
+        ));
+    }
+    if let Some(c) = lang.chars().find(|c| c.is_control() || *c == '"') {
+        return Err(format!("invalid character {c:?} in language name"));
+    }
+    Ok(lang.to_string())
 }
 
 #[cfg(test)]
@@ -87,6 +112,33 @@ mod tests {
             "über",
         ] {
             assert!(username(bad).is_err(), "{bad} should be rejected");
+        }
+    }
+
+    #[test]
+    fn accepts_real_language_names() {
+        for ok in ["rust", "C++", "C#", "F#", "Objective-C", "Jupyter Notebook"] {
+            assert_eq!(language(ok).as_deref(), Ok(ok), "{ok}");
+        }
+    }
+
+    #[test]
+    fn language_is_trimmed() {
+        assert_eq!(language("  rust ").unwrap(), "rust");
+    }
+
+    #[test]
+    fn rejects_empty_or_oversized_language() {
+        assert!(language("").is_err());
+        assert!(language("   ").is_err());
+        assert!(language(&"x".repeat(51)).is_err());
+        assert!(language(&"x".repeat(50)).is_ok());
+    }
+
+    #[test]
+    fn rejects_quotes_and_control_characters_in_language() {
+        for bad in ["rust\" label:bug", "ru\nst", "ru\tst", "\"rust\""] {
+            assert!(language(bad).is_err(), "{bad:?} should be rejected");
         }
     }
 }
