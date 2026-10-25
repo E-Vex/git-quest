@@ -480,7 +480,8 @@ mod tests {
 
     #[test]
     fn issue_query_keeps_multi_word_languages_together() {
-        assert!(issue_query("Jupyter Notebook", "good first issue").contains(r#"language:"Jupyter Notebook""#));
+        assert!(issue_query("Jupyter Notebook", "good first issue")
+            .contains(r#"language:"Jupyter Notebook""#));
     }
 }
 
