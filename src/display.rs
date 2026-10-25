@@ -162,6 +162,49 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Pa
     out
 }
 
+/// Render a markdown progress block suitable for a profile README.
+pub fn render_readme(_username: &str, items: &[Progress], _pal: Palette) -> String {
+    let mut out = String::new();
+    out.push_str("<!-- git-quest -->\n");
+    out.push_str("## GitHub Achievements\n\n");
+    for p in items {
+        let name = p.def.name;
+        let frac = p.fraction();
+        let bar_str = bar(frac);
+        let (status, remaining_text) = match p.next_tier() {
+            Some((tier, threshold)) => {
+                let remaining = p.remaining();
+                let rem_str = if remaining == 0 { "complete".to_string() } else { format!("{remaining} remaining") };
+                let tier_str = match tier {
+                    Tier::Default => format!("{} to unlock", threshold),
+                    _ => format!("{} to {}", threshold, tier),
+                };
+                (format!("{}/{} to {}", p.current, threshold, tier_str), rem_str)
+            }
+            None => ("GOLD COMPLETE".to_string(), "🏆 every tier achieved".to_string()),
+        };
+        let detail_str = p.detail.as_deref().unwrap_or("");
+        let detail_part = if detail_str.is_empty() {
+            String::new()
+        } else {
+            format!(" · {}", detail_str)
+        };
+        out.push_str(&format!(
+            "- **{}** `{}` — {}/{} | `{}` — {}{}{}\n",
+            p.def.emoji,
+            name,
+            p.current,
+            p.def.tiers.get(0).copied().unwrap_or(0),
+            status,
+            bar_str,
+            remaining_text,
+            detail_part
+        ));
+    }
+    out.push_str("<!-- /git-quest -->\n");
+    out
+}
+
 /// Render the `hunt` command results.
 pub fn render_hunt(lang: &str, label: &str, total: u64, issues: &[IssueItem], pal: Palette) -> String {
     let mut out = String::new();

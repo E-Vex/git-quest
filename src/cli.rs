@@ -43,6 +43,12 @@ pub enum Command {
         #[arg(value_parser = crate::validate::username)]
         username: Option<String>,
     },
+    /// Generate a progress block for your profile README
+    Readme {
+        /// GitHub username to analyze (e.g. octocat); omit for the token owner
+        #[arg(value_parser = crate::validate::username)]
+        username: Option<String>,
+    },
     /// Hunt for open `good first issue` tasks matching your stack
     Hunt {
         /// Programming language to filter by (e.g. rust, go, python)
