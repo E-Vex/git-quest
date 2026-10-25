@@ -140,6 +140,35 @@ pub fn classify(
     }
 }
 
+/// Extract a readable message from a GitHub error body.
+///
+/// GitHub puts the headline in `message` and the actionable detail in
+/// `errors[]` (as objects with a `message`, or bare strings), e.g.
+/// `Validation Failed: The listed users cannot be searched ...`.
+pub fn parse_error_body(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let headline = value.get("message")?.as_str()?.trim().to_string();
+    let details: Vec<String> = value
+        .get("errors")
+        .and_then(|e| e.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    serde_json::Value::String(s) => Some(s.clone()),
+                    other => other.get("message")?.as_str().map(str::to_string),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if details.is_empty() {
+        Some(headline)
+    } else {
+        Some(format!("{headline}: {}", details.join("; ")))
+    }
+}
+
 fn header_u64(headers: &HeaderMap, name: &str) -> Option<u64> {
     headers.get(name)?.to_str().ok()?.trim().parse().ok()
 }
@@ -404,5 +433,47 @@ mod tests {
         assert_eq!(format_wait(Duration::from_secs(3599)), "60 min");
         assert_eq!(format_wait(Duration::from_secs(3600)), "1h 00min");
         assert_eq!(format_wait(Duration::from_secs(3600 + 5 * 60)), "1h 05min");
+    }
+
+    #[test]
+    fn error_body_with_only_a_message() {
+        assert_eq!(
+            parse_error_body(r#"{"message":"Not Found"}"#).as_deref(),
+            Some("Not Found")
+        );
+    }
+
+    #[test]
+    fn error_body_details_are_appended() {
+        let body = r#"{"message":"Validation Failed","errors":[{"message":"The listed users cannot be searched","resource":"Search"}]}"#;
+        assert_eq!(
+            parse_error_body(body).as_deref(),
+            Some("Validation Failed: The listed users cannot be searched")
+        );
+    }
+
+    #[test]
+    fn error_body_accepts_string_details_and_skips_unknown_shapes() {
+        let body = r#"{"message":"Bad","errors":["first",{"code":"x"},{"message":"second"}]}"#;
+        assert_eq!(
+            parse_error_body(body).as_deref(),
+            Some("Bad: first; second")
+        );
+    }
+
+    #[test]
+    fn error_body_that_is_not_json_yields_none() {
+        assert_eq!(parse_error_body("<html>502</html>"), None);
+        assert_eq!(parse_error_body(""), None);
+        assert_eq!(parse_error_body(r#"{"no_message":1}"#), None);
+    }
+
+    #[test]
+    fn detailed_unprocessable_message_triggers_the_user_hint() {
+        let message = parse_error_body(
+            r#"{"message":"Validation Failed","errors":[{"message":"The listed users cannot be searched either because the users do not exist"}]}"#,
+        );
+        let err = classify_simple(422, message.as_deref());
+        assert!(err.to_string().contains("does not exist"), "{err}");
     }
 }

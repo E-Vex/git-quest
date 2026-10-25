@@ -6,8 +6,8 @@ use std::time::{Duration, SystemTime};
 
 mod error;
 
-use error::classify;
 pub use error::ApiError;
+use error::{classify, parse_error_body};
 
 const REST_BASE: &str = "https://api.github.com";
 const GRAPHQL_URL: &str = "https://api.github.com/graphql";
@@ -80,15 +80,9 @@ impl GithubClient {
                 .map_err(|e| ApiError::from_decode(what, status.as_u16(), e));
         }
 
-        #[derive(Deserialize)]
-        struct ErrorBody {
-            message: String,
-        }
         let headers = resp.headers().clone();
         let body = resp.text().await.unwrap_or_default();
-        let message = serde_json::from_str::<ErrorBody>(&body)
-            .ok()
-            .map(|b| b.message);
+        let message = parse_error_body(&body);
         Err(classify(
             what,
             status.as_u16(),
