@@ -7,8 +7,23 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "git-quest", version, about, long_about = None)]
 pub struct Cli {
+    /// When to colorize output
+    #[arg(long, global = true, value_enum, default_value_t = ColorWhen::Auto)]
+    pub color: ColorWhen,
+
     #[command(subcommand)]
     pub command: Command,
+}
+
+/// Value of the global `--color` flag.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorWhen {
+    /// Colors on a terminal, unless NO_COLOR is set
+    Auto,
+    /// Always emit ANSI colors, even when piped
+    Always,
+    /// Never emit ANSI colors
+    Never,
 }
 
 #[derive(Subcommand)]

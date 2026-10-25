@@ -12,9 +12,10 @@ use std::process::ExitCode;
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
+    let pal = display::Palette::resolve(cli.color);
     let result = match cli.command {
-        cli::Command::Check { username } => check::run(&username).await,
-        cli::Command::Hunt { lang, limit, sort } => hunt::run(&lang, limit, &sort).await,
+        cli::Command::Check { username } => check::run(&username, pal).await,
+        cli::Command::Hunt { lang, limit, sort } => hunt::run(&lang, limit, &sort, pal).await,
     };
 
     match result {

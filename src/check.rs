@@ -1,9 +1,9 @@
 use crate::achievements::{Progress, GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, PULL_SHARK, STARSTRUCK};
-use crate::display;
+use crate::display::{self, Palette};
 use crate::github::GithubClient;
 use anyhow::Result;
 
-pub async fn run(username: &str) -> Result<()> {
+pub async fn run(username: &str, pal: Palette) -> Result<()> {
     let client = GithubClient::new()?;
 
     let (prs, stars, answers, coauthored) = tokio::join!(
@@ -61,12 +61,7 @@ pub async fn run(username: &str) -> Result<()> {
 
     print!(
         "{}",
-        display::render_check(
-            username,
-            &items,
-            client.has_token(),
-            display::Palette::detect()
-        )
+        display::render_check(username, &items, client.has_token(), pal)
     );
     Ok(())
 }

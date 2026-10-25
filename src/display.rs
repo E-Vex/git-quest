@@ -1,4 +1,5 @@
 use crate::achievements::{Progress, Tier};
+use crate::cli::ColorWhen;
 use crate::github::IssueItem;
 use owo_colors::OwoColorize;
 use std::ffi::OsStr;
@@ -21,9 +22,18 @@ impl Palette {
         Self { enabled }
     }
 
+    /// Resolve the `--color` flag into a palette.
+    pub fn resolve(when: ColorWhen) -> Self {
+        match when {
+            ColorWhen::Always => Self::new(true),
+            ColorWhen::Never => Self::new(false),
+            ColorWhen::Auto => Self::detect(),
+        }
+    }
+
     /// Auto-detect: colors only on a terminal, and never when the
     /// `NO_COLOR` convention (<https://no-color.org>) asks for none.
-    pub fn detect() -> Self {
+    fn detect() -> Self {
         Self::new(colors_allowed(
             std::env::var_os("NO_COLOR").as_deref(),
             std::io::stdout().is_terminal(),
@@ -397,5 +407,11 @@ mod tests {
         assert!(!colors_allowed(Some(OsStr::new("1")), true));
         assert!(!colors_allowed(Some(OsStr::new("anything")), true));
         assert!(colors_allowed(Some(OsStr::new("")), true));
+    }
+
+    #[test]
+    fn explicit_color_choice_overrides_detection() {
+        assert!(Palette::resolve(ColorWhen::Always).enabled);
+        assert!(!Palette::resolve(ColorWhen::Never).enabled);
     }
 }
