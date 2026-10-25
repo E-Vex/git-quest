@@ -262,7 +262,7 @@ impl GithubClient {
             total_count: u64,
         }
 
-        let q = format!("label:\"good first issue\" state:open language:{lang} no:assignee");
+        let q = issue_query(lang);
         let r: R = self
             .send(
                 self.http.get(format!("{REST_BASE}/search/issues")).query(&[
@@ -298,6 +298,14 @@ impl GithubClient {
     }
 }
 
+/// Build the Search API query for open, unassigned `good first issue`s.
+///
+/// The language is quoted so multi-word names such as `Jupyter Notebook`
+/// stay a single qualifier value.
+fn issue_query(lang: &str) -> String {
+    format!("label:\"good first issue\" state:open language:\"{lang}\" no:assignee")
+}
+
 /// A single issue found by `hunt`.
 pub struct IssueItem {
     pub title: String,
@@ -308,4 +316,22 @@ pub struct IssueItem {
     pub reactions: u64,
     /// ISO-8601 creation timestamp.
     pub created_at: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn issue_query_quotes_the_language() {
+        assert_eq!(
+            issue_query("rust"),
+            r#"label:"good first issue" state:open language:"rust" no:assignee"#
+        );
+    }
+
+    #[test]
+    fn issue_query_keeps_multi_word_languages_together() {
+        assert!(issue_query("Jupyter Notebook").contains(r#"language:"Jupyter Notebook""#));
+    }
 }
