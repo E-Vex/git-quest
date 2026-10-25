@@ -23,8 +23,13 @@ pub enum Command {
         /// Programming language to filter by (e.g. rust, go, python)
         #[arg(short = 'l', long)]
         lang: String,
-        /// Maximum number of issues to show
-        #[arg(short = 'n', long, default_value_t = 3)]
+        /// Maximum number of issues to show (1-100)
+        #[arg(
+            short = 'n',
+            long,
+            default_value_t = 3,
+            value_parser = clap::value_parser!(u8).range(1..=100)
+        )]
         limit: u8,
         /// Sort results by community validation or freshness
         #[arg(short = 's', long, value_enum, default_value_t = SortBy::Reactions)]
