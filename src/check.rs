@@ -6,11 +6,23 @@ use anyhow::Result;
 pub async fn run(username: &str, pal: Palette, json: bool) -> Result<()> {
     let client = GithubClient::new()?;
 
+    let username = if username.is_empty() {
+        match client.authenticated_user().await {
+            Some(name) => name,
+            None => anyhow::bail!(
+                "no username provided and no GITHUB_TOKEN configured for authentication"
+            ),
+        }
+    } else {
+        username.to_string()
+    };
+    let client = GithubClient::new()?;
+
     let (prs, stars, answers, coauthored) = tokio::join!(
-        client.merged_pr_count(username),
-        client.top_repo_stars(username),
-        client.accepted_discussion_answers(username),
-        client.coauthored_commit_count(username),
+        client.merged_pr_count(&username),
+        client.top_repo_stars(&username),
+        client.accepted_discussion_answers(&username),
+        client.coauthored_commit_count(&username),
     );
     let prs = prs?;
     let (star_repo, stars) = match stars? {
@@ -79,7 +91,7 @@ pub async fn run(username: &str, pal: Palette, json: bool) -> Result<()> {
     } else {
         print!(
             "{}",
-            display::render_check(username, &items, client.has_token(), pal)
+            display::render_check(&username, &items, client.has_token(), pal)
         );
     }
     Ok(())

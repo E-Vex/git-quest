@@ -153,6 +153,25 @@ impl GithubClient {
         self.token.is_some()
     }
 
+    /// Resolve the username of the authenticated user from the token.
+    /// Returns `None` when no token is configured or the request fails.
+    pub async fn authenticated_user(&self) -> Option<String> {
+        if self.token.is_none() {
+            return None;
+        }
+        #[derive(Deserialize)]
+        struct User {
+            login: String,
+        }
+        self.send(
+            self.http.get(format!("{}/user", self.rest_base)),
+            "authenticated user",
+        )
+        .await
+        .ok()
+        .map(|u: User| u.login)
+    }
+
     /// Send a request and decode JSON, mapping failures to a typed
     /// [`ApiError`] with an actionable message.
     async fn send<T: DeserializeOwned>(

@@ -33,9 +33,9 @@ pub enum ColorWhen {
 pub enum Command {
     /// Check a GitHub user's achievement progress
     Check {
-        /// GitHub username to analyze (e.g. octocat)
+        /// GitHub username to analyze (e.g. octocat); omit for the token owner
         #[arg(value_parser = crate::validate::username)]
-        username: String,
+        username: Option<String>,
     },
     /// Hunt for open `good first issue` tasks matching your stack
     Hunt {
