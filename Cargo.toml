@@ -2,6 +2,7 @@
 name = "git-quest"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.82"
 description = "The missing CLI for GitHub Achievements — track your progress and hunt good first issues."
 license = "MIT"
 repository = "https://github.com/E-Vex/git-quest"
