@@ -2,9 +2,15 @@ use anyhow::{anyhow, Result};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::time::Duration;
 
 const REST_BASE: &str = "https://api.github.com";
 const GRAPHQL_URL: &str = "https://api.github.com/graphql";
+
+/// Fail fast on unreachable networks instead of hanging the terminal.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Upper bound for a whole request, including reading the body.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A thin GitHub REST/GraphQL client with optional token auth.
 ///
@@ -38,6 +44,8 @@ impl GithubClient {
 
         let http = reqwest::Client::builder()
             .default_headers(headers)
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
             .build()?;
 
         Ok(Self { http, token })
