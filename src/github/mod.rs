@@ -182,8 +182,7 @@ impl GithubClient {
         let mut last_err: Option<ApiError> = None;
 
         for attempt in 0..=MAX_RETRIES {
-            let clone_result = req.try_clone();
-            let req_clone = clone_result.unwrap_or_else(|| req.try_clone().unwrap());
+            let req_clone = req.try_clone().expect("Request must be cloneable for retries");
             match self.attempt_send(req_clone, what).await {
                 Ok(val) => return Ok(val),
                 Err(err) => {
