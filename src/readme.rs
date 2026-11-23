@@ -13,6 +13,11 @@ pub async fn run(username: &str, json: bool) -> Result<()> {
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
                 "username": report.username,
+                // Same contract as `check --json` and `track --json`: a
+                // source that failed is omitted from the markdown block
+                // (never faked as zero) and `partial` flags the run.
+                "partial": !report.errors.is_empty(),
+                "errors": report.errors,
                 "markdown": markdown,
             }))
             .unwrap()

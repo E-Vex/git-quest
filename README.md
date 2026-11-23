@@ -134,9 +134,9 @@ git-quest track --json <username>      # what's within reach, as JSON
 git-quest readme --json <username>     # the markdown block, as JSON
 ```
 
-JSON consumers can rely on the `partial` and `errors` fields in `check`
-and `track`: when a source failed, the affected counts are 0 or omitted
-and `partial` is `true` — a genuine zero is never faked.
+JSON consumers can rely on the `partial` and `errors` fields in `check`,
+`track` and `readme`: when a source failed, the affected counts are 0 or
+omitted and `partial` is `true` — a genuine zero is never faked.
 
 ```bash
 git-quest complete bash > /etc/bash_completion.d/git-quest  # shell completions
