@@ -28,3 +28,20 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked
+
+  # Keep the `rust-version` claim in Cargo.toml honest: if a dependency
+  # bump or code change silently requires a newer compiler, this fails.
+  # Only the build is checked: the dev-dependencies used by the test
+  # suite (wiremock) require a newer rustc than the shipped binary does.
+  msrv:
+    name: MSRV 1.85
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.85
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --locked

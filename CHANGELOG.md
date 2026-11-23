@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.2.1
+
+### Fixes
+- `hunt` no longer lists pull requests: GitHub's issue search matches
+  issues *and* pull requests, so a PR carrying the `good first issue`
+  label could be presented as a contribution task (and counted in the
+  reported total). The query now pins `is:issue`.
+- `hunt` also skips issues in archived repositories (`archived:false`) —
+  they cannot accept contributions, so pointing a hunter there is a dead
+  end.
+- `check`/`track`/`readme` without a username no longer blame a missing
+  `GITHUB_TOKEN` when one is configured but broken: a revoked or expired
+  token, an exhausted quota or a network failure now reports the real
+  error (`could not resolve the token owner's login: …`).
+
+### Improvements
+- `readme --json` exposes `partial` and `errors` just like `check --json`
+  and `track --json`, so all three report commands share one JSON
+  contract and consumers can tell a degraded run from a genuine zero.
+- MSRV corrected to 1.85 and now verified by CI: the locked dependency
+  stack had silently drifted past the declared 1.82 (the TLS/QUIC
+  closure of reqwest always contains edition-2024 crates, which cargo
+  1.82 cannot even parse). `idna_adapter` is pinned to the ICU4X 1.5
+  line so the resolver does not pull the rustc-1.88 ICU4X 2.4 chain,
+  and a new CI job builds on Rust 1.85 to keep the claim honest.
+
 ## v0.2.0
 
 ### Features

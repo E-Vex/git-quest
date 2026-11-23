@@ -5,6 +5,103 @@ Product-facing changes live in the [CHANGELOG](../CHANGELOG.md); this file
 records the reasoning behind them so future maintainers can follow the
 decisions.
 
+## 2026-11-23 — v0.2.1 pass
+
+Scope: quality sweep after the v0.2.0 release — bugs found by re-reading
+the whole pipeline, JSON-contract consistency, CI hardening, and an
+MSRV correction.
+
+### Problems found and fixed
+
+1. **`hunt` could hand the user a pull request** (`fix(hunt)`)
+   GitHub's issue search covers issues *and* pull requests, and the hunt
+   query did not pin `is:issue`. Verified live before the fix: for
+   `language:rust`, 33 open PRs matched the query, so a PR labelled
+   `good first issue` could be presented as a contribution task — and
+   inflated the reported `total`. Archived repositories (which cannot
+   accept contributions) were also in scope. The query now starts with
+   `is:issue` and pins `archived:false`; both are documented qualifiers
+   and were validated against the live API before committing.
+   A follow-up smoke test confirmed zero `/pull/` URLs in the top 20.
+
+2. **A broken token was reported as a missing one** (`fix(progress)`)
+   `GithubClient::authenticated_user()` swallowed every failure
+   (`.ok()`), so `check` with no username against a revoked or expired
+   token answered "no GITHUB_TOKEN configured for authentication" — the
+   wrong fix hint for the actual problem. The lookup now returns
+   `Ok(None)` only when no token exists, and surfaces the request
+   failure with `could not resolve the token owner's login: …` context.
+   The distinction is covered at two levels: the client tests (login
+   resolved, `Ok(None)` without a token and *without any network
+   round-trip*, 401 surfaced with context) and `fetch()`-level tests
+   (no username without a token → actionable error; rejected token →
+   the real cause).
+
+3. **`readme --json` broke the documented JSON contract** (`feat(readme)`)
+   `check --json` and `track --json` expose `partial`/`errors`; `readme
+   --json` did not, so a consumer could not tell that the markdown
+   block was silently missing an achievement whose source had failed.
+   Aligned; the README now says the contract covers all three commands.
+
+### Testing
+
+- 10 new tests (114 total): hunt query qualifiers, `authenticated_user`
+  behaviour, and four `fetch()` failure modes exercised against a
+  wiremock mock server — missing user (404) → error, every source
+  failing → error with the first cause, one source failing → partial
+  report with the failed achievement omitted (never faked as zero), and
+  the two username-resolution cases.
+- `Debug` derived on `AchievementDef`/`Progress`/`ProgressReport` so
+  assertion failures print the report instead of a compile error.
+
+### MSRV correction (the important note for future maintainers)
+
+The declared `rust-version = 1.82` was no longer true, and could not be
+made true by pinning alone:
+
+- reqwest's `__rustls-ring` feature references `quinn?/ring`, which
+  forces cargo to *resolve and lock* the QUIC closure (quinn → rand
+  0.10 → chacha20 → cpufeatures 0.3.x) even though `http3` is never
+  enabled. cpufeatures 0.3.x is edition-2024, which cargo 1.82 cannot
+  even *parse* — so `cargo build --locked` failed on 1.82 while
+  succeeding on stable. Pruning the unused closure from the lock does
+  not help: any re-resolve (even offline, even a fresh
+  `cargo generate-lockfile`) re-adds it, as verified three ways.
+- A fresh resolve also floated the `url → idna → idna_adapter` chain
+  onto ICU4X 2.4.0, which declares rustc 1.88.
+
+Actions taken:
+
+- `idna_adapter` pinned to 1.2.0 (the ICU4X 1.5 line) so the resolver
+  stays off the rustc-1.88 chain.
+- `rust-version` corrected to **1.85** — the true build floor
+  (edition-2024 crates in the locked graph; verified by building with
+  the 1.85 toolchain locally before tagging).
+- CI gained an `msrv` job that builds on 1.85. It deliberately does not
+  run the test suite there: the dev-dependency wiremock uses if-let
+  chains stabilized in rustc 1.88, and dev-dependencies are not part of
+  what a user compiles. The job is the guardrail: if a dependency bump
+  breaks the MSRV again, CI fails and the choice (pin or bump) is made
+  consciously.
+
+### Verification
+
+- 114 tests, `cargo fmt --check`, `cargo clippy -- -D warnings`,
+  `cargo build --locked` green on stable (1.100); `cargo build --locked`
+  green on 1.85.
+- Live smoke tests against api.github.com: `check` (token owner, named
+  user, unauthenticated), `track`, `readme --json` (new keys present),
+  `hunt` (no PR URLs in results), missing-user error path, and both
+  username-resolution error paths (no token vs rejected token).
+
+### Deliberately left alone
+
+- crates.io / Homebrew publishing — still requires maintainer
+  credentials.
+- wiremock downgrade to make the MSRV job run tests — rejected: the
+  user-facing build floor is what `rust-version` describes, and
+  contributors run a current stable toolchain anyway.
+
 ## 2026-11-23 — v0.2.0 pass
 
 Scope: full architecture review, bug fixing, roadmap completion.

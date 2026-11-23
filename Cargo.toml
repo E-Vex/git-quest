@@ -1,8 +1,8 @@
 [package]
 name = "git-quest"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 description = "The missing CLI for GitHub Achievements — track your progress and hunt good first issues."
 license = "MIT"
 repository = "https://github.com/E-Vex/git-quest"
