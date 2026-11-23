@@ -73,6 +73,23 @@ git-quest hunt --lang python --sort created # freshest first
     https://github.com/rust-lang/wg-async/issues/238
 ```
 
+### `track` — what's within reach
+
+```bash
+git-quest track <username>          # tiers you could hit soon
+git-quest track --reach 10          # widen the window
+git-quest track                     # token owner (needs GITHUB_TOKEN)
+```
+
+```text
+🎯 Track — tiers within reach (≤5 more) for E-Vex
+
+ 1. 👥 Pair Extraordinaire 6 co-authored commits remaining (4/10 to Bronze)
+
+Further out:
+ 🦈 Pull Shark 62 merged PRs remaining (66/128 to Silver)
+```
+
 ## Achievements tracked
 
 | Achievement | Measures | Default | Bronze | Silver | Gold |
@@ -109,20 +126,22 @@ git-quest hunt --lang rust --label "good first issue"
 ```bash
 git-quest check --json <username>      # raw JSON output
 git-quest hunt --json --lang rust
+git-quest track --json <username>      # what's within reach, as JSON
+git-quest readme --json <username>     # the markdown block, as JSON
 ```
+
+JSON consumers can rely on the `partial` and `errors` fields in `check`
+and `track`: when a source failed, the affected counts are 0 or omitted
+and `partial` is `true` — a genuine zero is never faked.
 
 ```bash
 git-quest complete bash > /etc/bash_completion.d/git-quest  # shell completions
 ```
 
-```bash
-git-quest readme <username>            # markdown block for profile README
-```
-
 ## Roadmap
 
 - [x] v0.1.0 — `check` + `hunt`
-- [ ] v0.2.0 — `track`: watch your progress, notify when a tier is within reach
+- [x] v0.2.0 — `track`: watch your progress, see when a tier is within reach
 - [x] `hunt --label`
 - [x] `--json`
 - [x] `check` without name

@@ -1,12 +1,11 @@
 [package]
 name = "git-quest"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
 description = "The missing CLI for GitHub Achievements — track your progress and hunt good first issues."
 license = "MIT"
 repository = "https://github.com/E-Vex/git-quest"
-homepage = "https://github.com/E-Vex/git-quest"
 readme = "README.md"
 keywords = ["github", "achievements", "cli", "developer-tools", "open-source"]
 categories = ["command-line-utilities"]
