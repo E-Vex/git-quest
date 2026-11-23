@@ -488,8 +488,14 @@ fn retry_wait(err: &ApiError, attempt: u32) -> Option<Duration> {
 ///
 /// The language is quoted so multi-word names such as `Jupyter Notebook`
 /// stay a single qualifier value.
+///
+/// - `is:issue` — Search covers issues *and* pull requests, and PRs
+///   carrying the label would otherwise be listed as contribution
+///   tasks.
+/// - `archived:false` — an issue in an archived repository cannot be
+///   contributed to, so pointing a hunter there is a dead end.
 fn issue_query(lang: &str, label: &str) -> String {
-    format!("label:\"{label}\" state:open language:\"{lang}\" no:assignee")
+    format!("is:issue label:\"{label}\" state:open language:\"{lang}\" archived:false no:assignee")
 }
 
 /// A single issue found by `hunt`.
@@ -513,8 +519,18 @@ mod tests {
     fn issue_query_quotes_the_language() {
         assert_eq!(
             issue_query("rust", "good first issue"),
-            r#"label:"good first issue" state:open language:"rust" no:assignee"#
+            r#"is:issue label:"good first issue" state:open language:"rust" archived:false no:assignee"#
         );
+    }
+
+    #[test]
+    fn issue_query_targets_issues_not_pull_requests() {
+        assert!(issue_query("rust", "good first issue").starts_with("is:issue"));
+    }
+
+    #[test]
+    fn issue_query_excludes_archived_repositories() {
+        assert!(issue_query("rust", "good first issue").contains("archived:false"));
     }
 
     #[test]

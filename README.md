@@ -65,6 +65,10 @@ git-quest hunt --lang go --limit 5          # more results
 git-quest hunt --lang python --sort created # freshest first
 ```
 
+Results are real issues only (`is:issue`) in repositories that still
+accept contributions (`archived:false`); PRs and archived repos are
+filtered out automatically.
+
 ```text
 🎯 Hunt — good first issues for `rust`
 

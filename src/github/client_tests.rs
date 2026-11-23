@@ -257,7 +257,7 @@ async fn good_first_issues_sends_the_expected_query_and_maps_items() {
         .and(path("/search/issues"))
         .and(query_param(
             "q",
-            r#"label:"good first issue" state:open language:"rust" no:assignee"#,
+            r#"is:issue label:"good first issue" state:open language:"rust" archived:false no:assignee"#,
         ))
         .and(query_param("sort", "reactions-+1"))
         .and(query_param("order", "desc"))
