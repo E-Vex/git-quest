@@ -343,7 +343,7 @@ async fn good_first_issues_sends_the_expected_query_and_maps_items() {
         .await;
 
     let (total, issues) = client_for(&server, None)
-        .good_first_issues("rust", 2, "good first issue", "reactions-+1")
+        .good_first_issues("rust", 2, "good first issue", None, "reactions-+1")
         .await
         .unwrap();
 
@@ -357,6 +357,32 @@ async fn good_first_issues_sends_the_expected_query_and_maps_items() {
         issues[1].reactions, 0,
         "a missing reactions object counts as zero"
     );
+}
+
+#[tokio::test]
+async fn good_first_issues_appends_the_created_qualifier_when_max_age_is_set() {
+    let server = MockServer::start().await;
+    let expected_q = format!(
+        r#"is:issue label:"good first issue" state:open language:"rust" archived:false no:assignee created:>={}"#,
+        crate::github::iso_date_days_ago(90)
+    );
+    Mock::given(method("GET"))
+        .and(path("/search/issues"))
+        .and(query_param("q", expected_q))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "total_count": 2,
+            "items": []
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let (total, issues) = client_for(&server, None)
+        .good_first_issues("rust", 3, "good first issue", Some(90), "created")
+        .await
+        .unwrap();
+    assert_eq!(total, 2);
+    assert!(issues.is_empty());
 }
 
 #[tokio::test]

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod error;
 
@@ -389,12 +389,15 @@ impl GithubClient {
 
     /// Hunt — open `good first issue` tasks for a language, sorted by
     /// the given criterion (`reactions-+1`, `created`, `updated`,
-    /// `comments`). Returns (total available, top `limit` items).
+    /// `comments`). When `max_age_days` is set, only issues created
+    /// within the last N days are returned. Returns (total available,
+    /// top `limit` items).
     pub async fn good_first_issues(
         &self,
         lang: &str,
         limit: u8,
         label: &str,
+        max_age_days: Option<u64>,
         sort: &str,
     ) -> Result<(u64, Vec<IssueItem>)> {
         #[derive(Deserialize)]
@@ -418,7 +421,7 @@ impl GithubClient {
             total_count: u64,
         }
 
-        let q = issue_query(lang, label);
+        let q = issue_query(lang, label, max_age_days);
         let r: R = self
             .send(
                 self.http
@@ -502,8 +505,44 @@ fn retry_wait(err: &ApiError, attempt: u32) -> Option<Duration> {
 ///   tasks.
 /// - `archived:false` — an issue in an archived repository cannot be
 ///   contributed to, so pointing a hunter there is a dead end.
-fn issue_query(lang: &str, label: &str) -> String {
-    format!("is:issue label:\"{label}\" state:open language:\"{lang}\" archived:false no:assignee")
+/// - `created:>=<date>` — when `max_age_days` is set, cut off issues
+///   older than that; a `good first issue` from 2021 is usually not one
+///   anymore, even if it is still open.
+fn issue_query(lang: &str, label: &str, max_age_days: Option<u64>) -> String {
+    let mut q = format!(
+        "is:issue label:\"{label}\" state:open language:\"{lang}\" archived:false no:assignee"
+    );
+    if let Some(days) = max_age_days {
+        q.push_str(&format!(" created:>={}", iso_date_days_ago(days)));
+    }
+    q
+}
+
+/// ISO date (`YYYY-MM-DD`) for `days_ago` days before the current UTC date.
+fn iso_date_days_ago(days_ago: u64) -> String {
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    iso_date_from_days((now_secs / 86_400) as i64 - days_ago as i64)
+}
+
+/// Days since 1970-01-01 (UTC) → `YYYY-MM-DD`.
+///
+/// Howard Hinnant's `civil_from_days` algorithm: pure integer date math,
+/// which keeps the dependency tree free of a date crate for one qualifier.
+fn iso_date_from_days(days: i64) -> String {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097); // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// A single issue found by `hunt`.
@@ -526,25 +565,63 @@ mod tests {
     #[test]
     fn issue_query_quotes_the_language() {
         assert_eq!(
-            issue_query("rust", "good first issue"),
+            issue_query("rust", "good first issue", None),
             r#"is:issue label:"good first issue" state:open language:"rust" archived:false no:assignee"#
         );
     }
 
     #[test]
     fn issue_query_targets_issues_not_pull_requests() {
-        assert!(issue_query("rust", "good first issue").starts_with("is:issue"));
+        assert!(issue_query("rust", "good first issue", None).starts_with("is:issue"));
     }
 
     #[test]
     fn issue_query_excludes_archived_repositories() {
-        assert!(issue_query("rust", "good first issue").contains("archived:false"));
+        assert!(issue_query("rust", "good first issue", None).contains("archived:false"));
     }
 
     #[test]
     fn issue_query_keeps_multi_word_languages_together() {
-        assert!(issue_query("Jupyter Notebook", "good first issue")
+        assert!(issue_query("Jupyter Notebook", "good first issue", None)
             .contains(r#"language:"Jupyter Notebook""#));
+    }
+
+    #[test]
+    fn issue_query_with_max_age_cuts_off_old_issues() {
+        let q = issue_query("rust", "good first issue", Some(30));
+        assert!(
+            q.contains(&format!(" created:>={}", iso_date_days_ago(30))),
+            "{q}"
+        );
+        assert!(q.starts_with("is:issue"), "the base qualifiers stay intact");
+    }
+
+    #[test]
+    fn iso_date_from_days_matches_known_dates() {
+        // Vectors verified against an independent implementation.
+        assert_eq!(iso_date_from_days(0), "1970-01-01");
+        assert_eq!(iso_date_from_days(19_723), "2024-01-01");
+        assert_eq!(iso_date_from_days(20_000), "2024-10-04");
+        assert_eq!(iso_date_from_days(20_658), "2026-07-24");
+    }
+
+    #[test]
+    fn iso_date_from_days_handles_leap_and_year_edges() {
+        // 2023-12-31 (non-leap year end) and 2024-02-29 (leap day).
+        assert_eq!(iso_date_from_days(19_722), "2023-12-31");
+        assert_eq!(iso_date_from_days(19_782), "2024-02-29");
+    }
+
+    #[test]
+    fn iso_date_days_ago_zero_is_today() {
+        let now_secs = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert_eq!(
+            iso_date_days_ago(0),
+            iso_date_from_days((now_secs / 86_400) as i64)
+        );
     }
 
     #[test]

@@ -52,8 +52,9 @@ async fn main() -> ExitCode {
             lang,
             limit,
             label,
+            max_age,
             sort,
-        } => hunt::run(&lang, limit, &label, &sort, pal, cli.json).await,
+        } => hunt::run(&lang, limit, &label, max_age, &sort, pal, cli.json).await,
     };
 
     match result {

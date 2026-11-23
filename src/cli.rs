@@ -89,6 +89,9 @@ pub enum Command {
         /// Label to filter by (e.g. good first issue, help wanted)
         #[arg(long, value_parser = crate::validate::label, default_value = "good first issue")]
         label: String,
+        /// Only issues created within the last N days (e.g. 90)
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=36500))]
+        max_age: Option<u64>,
         /// Sort results by community validation or freshness
         #[arg(short = 's', long, value_enum, default_value_t = SortBy::Reactions)]
         sort: SortBy,
