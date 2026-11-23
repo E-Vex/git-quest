@@ -75,6 +75,62 @@ async fn token_is_sent_as_a_bearer_credential() {
 }
 
 #[tokio::test]
+async fn authenticated_user_resolves_the_login_from_the_token() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/user"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "login": "E-Vex" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let login = client_for(&server, Some("t"))
+        .authenticated_user()
+        .await
+        .unwrap();
+    assert_eq!(login.as_deref(), Some("E-Vex"));
+}
+
+#[tokio::test]
+async fn authenticated_user_is_none_without_a_token_and_makes_no_request() {
+    let server = MockServer::start().await;
+
+    let login = client_for(&server, None)
+        .authenticated_user()
+        .await
+        .unwrap();
+    assert_eq!(login, None);
+    assert!(
+        server.received_requests().await.unwrap().is_empty(),
+        "no network round-trip without a token"
+    );
+}
+
+#[tokio::test]
+async fn authenticated_user_surfaces_a_failed_lookup_with_context() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/user"))
+        .respond_with(
+            ResponseTemplate::new(401).set_body_json(json!({ "message": "Bad credentials" })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = client_for(&server, Some("revoked-token"))
+        .authenticated_user()
+        .await
+        .unwrap_err();
+    // `{:#}` renders the full context chain, exactly what the CLI prints.
+    let text = format!("{err:#}");
+    assert!(text.contains("could not resolve"), "{text}");
+    assert!(text.contains("401"), "{text}");
+    // A broken token must not be reported as a missing one.
+    assert!(!text.contains("no GITHUB_TOKEN configured"), "{text}");
+}
+
+#[tokio::test]
 async fn no_token_means_no_authorization_header() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

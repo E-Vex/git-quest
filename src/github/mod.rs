@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -154,20 +154,28 @@ impl GithubClient {
     }
 
     /// Resolve the username of the authenticated user from the token.
-    /// Returns `None` when no token is configured or the request fails.
-    pub async fn authenticated_user(&self) -> Option<String> {
-        self.token.as_ref()?;
+    ///
+    /// - `Ok(None)` — no token is configured, so there is nobody to
+    ///   resolve (callers decide what that means for them);
+    /// - `Err` — the lookup request failed (revoked token, exhausted
+    ///   quota, network down). The error is surfaced with context so a
+    ///   broken token is never misreported as a missing one.
+    pub async fn authenticated_user(&self) -> Result<Option<String>> {
+        if self.token.is_none() {
+            return Ok(None);
+        }
         #[derive(Deserialize)]
         struct User {
             login: String,
         }
-        self.send(
-            self.http.get(format!("{}/user", self.rest_base)),
-            "authenticated user",
-        )
-        .await
-        .ok()
-        .map(|u: User| u.login)
+        let user: User = self
+            .send(
+                self.http.get(format!("{}/user", self.rest_base)),
+                "authenticated user lookup",
+            )
+            .await
+            .context("could not resolve the token owner's login")?;
+        Ok(Some(user.login))
     }
 
     /// Send a request and decode JSON, mapping failures to a typed

@@ -32,6 +32,7 @@ impl fmt::Display for Tier {
 }
 
 /// Static definition of a GitHub profile achievement.
+#[derive(Debug)]
 pub struct AchievementDef {
     pub emoji: &'static str,
     pub name: &'static str,
@@ -73,7 +74,7 @@ pub const PAIR_EXTRAORDINAIRE: AchievementDef = AchievementDef {
 };
 
 /// Live progress of one achievement.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Progress {
     pub def: &'static AchievementDef,
     pub current: u64,

@@ -10,6 +10,7 @@ use crate::github::{ApiError, GithubClient};
 use anyhow::Result;
 
 /// Everything the report commands need to render a run.
+#[derive(Debug)]
 pub struct ProgressReport {
     /// The user the numbers belong to (resolved to the token owner when
     /// the caller passed no username).
@@ -47,15 +48,24 @@ impl ProgressReport {
 }
 
 /// Resolve an empty username to the token owner's login.
+///
+/// Three cases, each with its own message:
+///
+/// - a username was given — use it as-is;
+/// - no token is configured — explain what authentication is missing;
+/// - the lookup itself failed (revoked token, exhausted quota, network
+///   down) — surface the real failure instead of claiming the token is
+///   absent, so the fix hint matches the actual problem.
 async fn resolve_username(client: &GithubClient, username: &str) -> Result<String> {
-    if username.is_empty() {
-        client.authenticated_user().await.ok_or_else(|| {
-            anyhow::anyhow!(
-                "no username provided and no GITHUB_TOKEN configured for authentication"
-            )
-        })
-    } else {
-        Ok(username.to_string())
+    if !username.is_empty() {
+        return Ok(username.to_string());
+    }
+    match client.authenticated_user().await {
+        Ok(Some(login)) => Ok(login),
+        Ok(None) => Err(anyhow::anyhow!(
+            "no username provided and no GITHUB_TOKEN configured for authentication"
+        )),
+        Err(e) => Err(e),
     }
 }
 
@@ -200,6 +210,8 @@ pub fn achievement_json(p: &Progress) -> serde_json::Value {
 mod tests {
     use super::*;
     use crate::achievements::PULL_SHARK;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn report(items: Vec<Progress>) -> ProgressReport {
         ProgressReport {
@@ -310,5 +322,55 @@ mod tests {
             within[0].detail.is_none(),
             "equal remaining keeps insertion order"
         );
+    }
+
+    // --- fetch() failure modes, exercised against a mock GitHub API ---
+
+    fn mock_client(server: &MockServer, token: Option<&str>) -> GithubClient {
+        GithubClient::with_config(crate::github::ClientConfig {
+            token: token.map(str::to_string),
+            rest_base: server.uri(),
+            graphql_url: format!("{}/graphql", server.uri()),
+        })
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn fetch_without_a_username_needs_a_token() {
+        let server = MockServer::start().await;
+
+        let err = fetch(&mock_client(&server, None), "").await.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("no GITHUB_TOKEN configured for authentication"),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_without_a_username_surfaces_a_rejected_token() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/user"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "message": "Bad credentials"
+            })))
+            .mount(&server)
+            .await;
+
+        let err = fetch(&mock_client(&server, Some("revoked-token")), "")
+            .await
+            .unwrap_err();
+        // `{:#}` renders the full context chain, exactly what the CLI prints.
+        let text = format!("{err:#}");
+        assert!(
+            text.contains("could not resolve the token owner's login"),
+            "{text}"
+        );
+        assert!(text.contains("401"), "{text}");
+        // The old behaviour blamed the missing variable even when a
+        // (broken) token was configured — the message must match the
+        // actual problem.
+        assert!(!text.contains("no GITHUB_TOKEN configured"), "{text}");
     }
 }
