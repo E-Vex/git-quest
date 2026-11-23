@@ -56,6 +56,16 @@ pub enum Command {
             value_parser = clap::value_parser!(u8).range(1..=100)
         )]
         reach: u8,
+        /// Keep refreshing until interrupted (Ctrl+C)
+        #[arg(long)]
+        watch: bool,
+        /// Time between refreshes — seconds or an s/m/h suffix (e.g. 90s, 5m)
+        #[arg(
+            long,
+            default_value = "60s",
+            value_parser = crate::watch::parse_interval
+        )]
+        interval: std::time::Duration,
     },
     /// Generate a progress block for your profile README
     Readme {

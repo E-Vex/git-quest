@@ -1,13 +1,27 @@
 use crate::display::{self, Palette};
 use crate::github::GithubClient;
 use crate::progress::{self, ProgressReport};
+use crate::watch;
 use anyhow::Result;
+use std::time::Duration;
 
 /// `track` — the roadmap v0.2.0 feature: a one-shot report of which
 /// achievement tiers are within reach (at most `reach` steps away), so
-/// you always know what to do next.
-pub async fn run(username: &str, reach: u8, pal: Palette, json: bool) -> Result<()> {
+/// you always know what to do next. `--watch` turns the same report into
+/// a live dashboard (v0.3.0).
+pub async fn run(
+    username: &str,
+    reach: u8,
+    watch: bool,
+    interval: Duration,
+    pal: Palette,
+    json: bool,
+) -> Result<()> {
     let client = GithubClient::new()?;
+    if watch {
+        return watch::run(&client, username, reach, interval, json, pal).await;
+    }
+
     let report: ProgressReport = progress::fetch(&client, username).await?;
     let (within, further) = report.tiers_by_proximity(reach);
 

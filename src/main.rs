@@ -8,6 +8,7 @@ mod progress;
 mod readme;
 mod track;
 mod validate;
+mod watch;
 
 use clap::Parser;
 use std::process::ExitCode;
@@ -31,8 +32,21 @@ async fn main() -> ExitCode {
         cli::Command::Check { username } => {
             check::run(username.as_deref().unwrap_or(""), pal, cli.json).await
         }
-        cli::Command::Track { username, reach } => {
-            track::run(username.as_deref().unwrap_or(""), reach, pal, cli.json).await
+        cli::Command::Track {
+            username,
+            reach,
+            watch,
+            interval,
+        } => {
+            track::run(
+                username.as_deref().unwrap_or(""),
+                reach,
+                watch,
+                interval,
+                pal,
+                cli.json,
+            )
+            .await
         }
         cli::Command::Hunt {
             lang,

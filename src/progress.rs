@@ -5,7 +5,9 @@
 //! the fetch in one place means they can never disagree about fallback
 //! behaviour or error handling.
 
-use crate::achievements::{Progress, GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, PULL_SHARK, STARSTRUCK};
+use crate::achievements::{
+    AchievementDef, Progress, GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, PULL_SHARK, STARSTRUCK,
+};
 use crate::github::{ApiError, GithubClient};
 use anyhow::Result;
 
@@ -23,6 +25,11 @@ pub struct ProgressReport {
     /// report is *partial*: counts may understate reality and the
     /// affected achievements either show 0 or are omitted entirely.
     pub errors: Vec<String>,
+    /// The achievement sources behind [`Self::errors`], so consumers can
+    /// tell which counts are untrustworthy without parsing the message
+    /// strings (used by `track --watch` to suppress delta chips for
+    /// counts that are 0 only because their source failed).
+    pub(crate) failed: Vec<&'static AchievementDef>,
 }
 
 impl ProgressReport {
@@ -56,7 +63,10 @@ impl ProgressReport {
 /// - the lookup itself failed (revoked token, exhausted quota, network
 ///   down) — surface the real failure instead of claiming the token is
 ///   absent, so the fix hint matches the actual problem.
-async fn resolve_username(client: &GithubClient, username: &str) -> Result<String> {
+///
+/// `pub(crate)` so `track --watch` can resolve once before its loop
+/// instead of spending a request on `/user` every refresh.
+pub(crate) async fn resolve_username(client: &GithubClient, username: &str) -> Result<String> {
     if !username.is_empty() {
         return Ok(username.to_string());
     }
@@ -111,10 +121,12 @@ pub async fn fetch(client: &GithubClient, username: &str) -> Result<ProgressRepo
     );
 
     let mut errors = Vec::new();
+    let mut failed: Vec<&'static AchievementDef> = Vec::new();
     let prs = match prs_result {
         Ok(v) => v,
         Err(e) => {
             errors.push(format!("Pull Shark unavailable: {e}"));
+            failed.push(&PULL_SHARK);
             0
         }
     };
@@ -128,6 +140,7 @@ pub async fn fetch(client: &GithubClient, username: &str) -> Result<ProgressRepo
         }
         Err(e) => {
             errors.push(format!("Starstruck unavailable: {e}"));
+            failed.push(&STARSTRUCK);
             (None, 0)
         }
     };
@@ -135,6 +148,7 @@ pub async fn fetch(client: &GithubClient, username: &str) -> Result<ProgressRepo
         Ok(v) => v,
         Err(e) => {
             errors.push(format!("Galaxy Brain unavailable: {e}"));
+            failed.push(&GALAXY_BRAIN);
             None
         }
     };
@@ -142,6 +156,7 @@ pub async fn fetch(client: &GithubClient, username: &str) -> Result<ProgressRepo
         Ok(v) => Some(v),
         Err(e) => {
             errors.push(format!("Pair Extraordinaire unavailable: {e}"));
+            failed.push(&PAIR_EXTRAORDINAIRE);
             None
         }
     };
@@ -188,6 +203,7 @@ pub async fn fetch(client: &GithubClient, username: &str) -> Result<ProgressRepo
         has_token,
         items,
         errors,
+        failed,
     })
 }
 
@@ -219,6 +235,7 @@ mod tests {
             has_token: false,
             items,
             errors: Vec::new(),
+            failed: Vec::new(),
         }
     }
 

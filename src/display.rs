@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::io::IsTerminal;
+use std::time::Duration;
 
 const BAR_WIDTH: usize = 12;
 
@@ -63,6 +64,24 @@ impl Palette {
         let s = s.into();
         if self.enabled {
             s.cyan().to_string()
+        } else {
+            s
+        }
+    }
+
+    fn green(self, s: impl Into<String>) -> String {
+        let s = s.into();
+        if self.enabled {
+            s.bright_green().to_string()
+        } else {
+            s
+        }
+    }
+
+    fn red(self, s: impl Into<String>) -> String {
+        let s = s.into();
+        if self.enabled {
+            s.bright_red().to_string()
         } else {
             s
         }
@@ -205,6 +224,95 @@ pub fn render_readme(report: &ProgressReport) -> String {
     out
 }
 
+/// Humanize a refresh interval: `42s`, `5m`, `2h`.
+pub fn format_interval(d: Duration) -> String {
+    let secs = d.as_secs();
+    if secs >= 3600 && secs % 3600 == 0 {
+        format!("{}h", secs / 3600)
+    } else if secs >= 60 && secs % 60 == 0 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{secs}s")
+    }
+}
+
+/// The list part of `track` and `track --watch`: the numbered tiers within
+/// reach, then everything further out. `deltas` marks achievements whose
+/// count changed since the previous watch refresh; an empty slice renders
+/// the exact one-shot layout.
+fn track_body(
+    within: &[&Progress],
+    further: &[&Progress],
+    deltas: &[(String, i64)],
+    pal: Palette,
+) -> String {
+    let mut out = String::new();
+    let delta_for = |name: &str| deltas.iter().find(|(n, _)| n == name).map(|(_, d)| *d);
+
+    for (i, p) in within.iter().enumerate() {
+        let chip = match delta_for(p.def.name) {
+            Some(d) if d > 0 => format!(" {}", pal.green(format!("↑{d}"))),
+            Some(d) => format!(" {}", pal.red(format!("↓{}", -d))),
+            None => String::new(),
+        };
+        let _ = writeln!(
+            out,
+            " {}. {} {}{} {} ({})",
+            i + 1,
+            p.def.emoji,
+            pal.bold(p.def.name),
+            chip,
+            pal.paint(remaining_line(p), p.fraction()),
+            next_status(p)
+        );
+    }
+
+    if !within.is_empty() && !further.is_empty() {
+        out.push('\n');
+        let _ = writeln!(out, "{}", pal.dim("Further out:"));
+        for p in further {
+            let _ = writeln!(
+                out,
+                " {} {} {} ({})",
+                pal.dim(p.def.emoji),
+                pal.dim(p.def.name),
+                pal.dim(remaining_line(p)),
+                pal.dim(next_status(p))
+            );
+        }
+    } else if within.is_empty() {
+        // Nothing within reach: number the closest targets instead.
+        for (i, p) in further.iter().enumerate() {
+            let chip = match delta_for(p.def.name) {
+                Some(d) if d > 0 => format!(" {}", pal.green(format!("↑{d}"))),
+                Some(d) => format!(" {}", pal.red(format!("↓{}", -d))),
+                None => String::new(),
+            };
+            let _ = writeln!(
+                out,
+                " {}. {} {}{} {} ({})",
+                i + 1,
+                p.def.emoji,
+                pal.bold(p.def.name),
+                chip,
+                pal.paint(remaining_line(p), p.fraction()),
+                next_status(p)
+            );
+        }
+    }
+    out
+}
+
+/// The closing tip: where to hunt when nothing is close, momentum when
+/// something is.
+fn track_tip(within_is_empty: bool, pal: Palette) -> String {
+    if within_is_empty {
+        pal.cyan("💡 Tip: hunt contribution opportunities with `git-quest hunt --lang <lang>`")
+    } else {
+        pal.cyan("💡 Ship a small, focused PR today — the closest tier is within your grasp. 🚀")
+    }
+}
+
 /// Render the `track` command results: the tiers within reach first,
 /// then everything else as targets further out.
 pub fn render_track(report: &ProgressReport, reach: u8, pal: Palette) -> String {
@@ -239,61 +347,103 @@ pub fn render_track(report: &ProgressReport, reach: u8, pal: Palette) -> String 
     let _ = writeln!(out, "{}", pal.bold(header));
     out.push('\n');
 
-    for (i, p) in within.iter().enumerate() {
-        let _ = writeln!(
-            out,
-            " {}. {} {} {} ({})",
-            i + 1,
-            p.def.emoji,
-            pal.bold(p.def.name),
-            pal.paint(remaining_line(p), p.fraction()),
-            next_status(p)
-        );
-    }
-
-    if !within.is_empty() && !further.is_empty() {
-        out.push('\n');
-        let _ = writeln!(out, "{}", pal.dim("Further out:"));
-        for p in &further {
-            let _ = writeln!(
-                out,
-                " {} {} {} ({})",
-                pal.dim(p.def.emoji),
-                pal.dim(p.def.name),
-                pal.dim(remaining_line(p)),
-                pal.dim(next_status(p))
-            );
-        }
-    } else if within.is_empty() {
-        // Nothing within reach: number the closest targets instead.
-        for (i, p) in further.iter().enumerate() {
-            let _ = writeln!(
-                out,
-                " {}. {} {} {} ({})",
-                i + 1,
-                p.def.emoji,
-                pal.bold(p.def.name),
-                pal.paint(remaining_line(p), p.fraction()),
-                next_status(p)
-            );
-        }
-    }
+    out.push_str(&track_body(&within, &further, &[], pal));
 
     out.push('\n');
-    if within.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}",
-            pal.cyan("💡 Tip: hunt contribution opportunities with `git-quest hunt --lang <lang>`")
-        );
-    } else {
-        let _ = writeln!(
-            out,
-            "{}",
-            pal.cyan(
-                "💡 Ship a small, focused PR today — the closest tier is within your grasp. 🚀"
-            )
-        );
+    let _ = writeln!(out, "{}", track_tip(within.is_empty(), pal));
+    out.push('\n');
+    out
+}
+
+/// Render one `track --watch` frame.
+///
+/// `countdown` is `Some(seconds until the next refresh)` on live redraws;
+/// `None` renders the static "refreshing every …" line for piped output.
+/// When `error` is set, the frame keeps the previous snapshot on screen and
+/// explains why it did not move.
+pub fn render_watch(
+    report: Option<&ProgressReport>,
+    reach: u8,
+    deltas: &[(String, i64)],
+    error: Option<&str>,
+    interval: Duration,
+    countdown: Option<u64>,
+    pal: Palette,
+) -> String {
+    let mut out = String::new();
+    out.push('\n');
+    let wait_line = match countdown {
+        Some(secs) => format!("next refresh in {secs}s · Ctrl+C to stop"),
+        None => format!(
+            "refreshing every {} · Ctrl+C to stop",
+            format_interval(interval)
+        ),
+    };
+
+    match report {
+        None => {
+            let _ = writeln!(
+                out,
+                "{}",
+                pal.bold("🎯 Track — waiting for the first refresh")
+            );
+            let _ = writeln!(
+                out,
+                "{}",
+                pal.red(format!(
+                    "⚠ {}",
+                    error.unwrap_or("the first refresh has not completed yet")
+                ))
+            );
+        }
+        Some(r) if r.items.iter().all(|p| p.next_tier().is_none()) => {
+            let _ = writeln!(
+                out,
+                "{}",
+                pal.bold(format!(
+                    "🏆 Watch — every tracked achievement is GOLD COMPLETE for {}",
+                    r.username
+                ))
+            );
+            let _ = writeln!(out, "{}", pal.dim(wait_line));
+        }
+        Some(r) => {
+            let _ = writeln!(
+                out,
+                "{}",
+                pal.bold(format!(
+                    "🎯 Track — watching {} (reach ≤{}, every {})",
+                    r.username,
+                    reach,
+                    format_interval(interval)
+                ))
+            );
+            let _ = writeln!(out, "{}", pal.dim(wait_line));
+            // Interactive screens are cleared every redraw, which would
+            // wipe the stderr warnings fetch() prints — surface partial
+            // state in the frame itself.
+            if !r.errors.is_empty() {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    pal.red(format!("⚠ partial data — {}", r.errors.join("; ")))
+                );
+            }
+            if let Some(err) = error {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    pal.red(format!(
+                        "⚠ last refresh failed — showing the previous snapshot: {err}"
+                    ))
+                );
+            }
+            let (within, further) = r.tiers_by_proximity(reach);
+            out.push('\n');
+            out.push_str(&track_body(&within, &further, deltas, pal));
+            out.push('\n');
+            let _ = writeln!(out, "{}", track_tip(within.is_empty(), pal));
+        }
     }
     out.push('\n');
     out
@@ -378,6 +528,7 @@ mod tests {
             has_token,
             items,
             errors: Vec::new(),
+            failed: Vec::new(),
         }
     }
 
@@ -689,5 +840,140 @@ mod tests {
     fn explicit_color_choice_overrides_detection() {
         assert!(Palette::resolve(ColorWhen::Always).enabled);
         assert!(!Palette::resolve(ColorWhen::Never).enabled);
+    }
+
+    // --- track --watch frames ---
+
+    fn watch_deltas() -> Vec<(String, i64)> {
+        vec![("Pair Extraordinaire".to_string(), 2)]
+    }
+
+    #[test]
+    fn format_interval_is_humanized() {
+        assert_eq!(format_interval(Duration::from_secs(42)), "42s");
+        assert_eq!(format_interval(Duration::from_secs(59)), "59s");
+        assert_eq!(format_interval(Duration::from_secs(60)), "1m");
+        assert_eq!(format_interval(Duration::from_secs(300)), "5m");
+        assert_eq!(format_interval(Duration::from_secs(180)), "3m");
+        assert_eq!(format_interval(Duration::from_secs(3600)), "1h");
+        assert_eq!(format_interval(Duration::from_secs(7200)), "2h");
+        // Non-round values stay in seconds.
+        assert_eq!(format_interval(Duration::from_secs(61)), "61s");
+        assert_eq!(format_interval(Duration::from_secs(3661)), "3661s");
+    }
+
+    #[test]
+    fn watch_frame_shows_header_countdown_and_delta_chip() {
+        let items = [progress(&PULL_SHARK, 11), progress(&PAIR_EXTRAORDINAIRE, 8)];
+        let out = render_watch(
+            Some(&report(true, items.to_vec())),
+            5,
+            &watch_deltas(),
+            None,
+            Duration::from_secs(60),
+            Some(42),
+            plain(),
+        );
+        assert!(
+            out.contains("🎯 Track — watching octocat (reach ≤5, every 1m)"),
+            "{out}"
+        );
+        assert!(
+            out.contains("next refresh in 42s · Ctrl+C to stop"),
+            "{out}"
+        );
+        assert!(out.contains(" 1. 👥 Pair Extraordinaire ↑2"), "{out}");
+        assert!(
+            out.contains("2 co-authored commits remaining (8/10 to Bronze)"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn watch_frame_without_countdown_shows_the_cadence() {
+        let items = [progress(&PULL_SHARK, 11)];
+        let out = render_watch(
+            Some(&report(true, items.to_vec())),
+            5,
+            &[],
+            None,
+            Duration::from_secs(180),
+            None,
+            plain(),
+        );
+        assert!(
+            out.contains("refreshing every 3m · Ctrl+C to stop"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn watch_frame_marks_a_failed_refresh_and_keeps_the_snapshot() {
+        let items = [progress(&PULL_SHARK, 11)];
+        let out = render_watch(
+            Some(&report(true, items.to_vec())),
+            5,
+            &[],
+            Some("Pull Shark unavailable: GitHub is having trouble (500)"),
+            Duration::from_secs(60),
+            None,
+            plain(),
+        );
+        assert!(
+            out.contains("⚠ last refresh failed — showing the previous snapshot"),
+            "{out}"
+        );
+        // The stale values are still visible, never dropped silently.
+        assert!(out.contains("Pull Shark"), "{out}");
+    }
+
+    #[test]
+    fn watch_frame_celebrates_a_gold_complete_report() {
+        let items = [progress(&PULL_SHARK, 5000)];
+        let out = render_watch(
+            Some(&report(true, items.to_vec())),
+            5,
+            &[],
+            None,
+            Duration::from_secs(60),
+            Some(7),
+            plain(),
+        );
+        assert!(
+            out.contains("🏆 Watch — every tracked achievement is GOLD COMPLETE"),
+            "{out}"
+        );
+        assert!(out.contains("next refresh in 7s"), "{out}");
+        assert!(!out.contains("GOLD COMPLETE for octocat (reach"), "{out}");
+    }
+
+    #[test]
+    fn watch_output_contains_no_escape_sequences_when_plain() {
+        let items = [progress(&PULL_SHARK, 11), progress(&STARSTRUCK, 0)];
+        let out = render_watch(
+            Some(&report(true, items.to_vec())),
+            5,
+            &watch_deltas(),
+            None,
+            Duration::from_secs(60),
+            Some(10),
+            plain(),
+        );
+        assert!(!out.contains('\x1b'), "{out}");
+
+        let colored = render_watch(
+            Some(&report(true, items.to_vec())),
+            5,
+            &watch_deltas(),
+            None,
+            Duration::from_secs(60),
+            Some(10),
+            Palette::new(true),
+        );
+        assert_eq!(
+            strip_ansi(&colored),
+            out,
+            "colors must not change the layout"
+        );
     }
 }
