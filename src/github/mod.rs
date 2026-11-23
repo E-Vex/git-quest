@@ -171,8 +171,10 @@ impl GithubClient {
     }
 
     /// Send a request and decode JSON, mapping failures to a typed
-    /// [`ApiError`] with an actionable message. Retries up to 3 times
-    /// on network errors, timeouts and rate limits.
+    /// [`ApiError`] with an actionable message. Retries transient
+    /// failures (network, timeouts, brief rate-limit windows, 5xx) up
+    /// to 3 times with a bounded wait; exhausted quotas fail fast with
+    /// the actionable message instead of hammering GitHub.
     async fn send<T: DeserializeOwned>(
         &self,
         req: reqwest::RequestBuilder,
@@ -188,17 +190,16 @@ impl GithubClient {
             match self.attempt_send(req_clone, what).await {
                 Ok(val) => return Ok(val),
                 Err(err) => {
-                    let retryable = matches!(
-                        &err,
-                        ApiError::Network { timeout: true, .. }
-                            | ApiError::RateLimited { .. }
-                            | ApiError::SecondaryRateLimit { .. }
-                    );
-                    if !retryable || attempt == MAX_RETRIES {
+                    if attempt == MAX_RETRIES {
                         return Err(err);
                     }
-                    last_err = Some(err);
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    match retry_wait(&err, attempt) {
+                        Some(wait) => {
+                            last_err = Some(err);
+                            tokio::time::sleep(wait).await;
+                        }
+                        None => return Err(err),
+                    }
                 }
             }
         }
@@ -447,6 +448,42 @@ impl GithubClient {
     }
 }
 
+/// How long to wait before retrying an [`ApiError`], or `None` when the
+/// error must not be retried.
+///
+/// Policy, tuned for an interactive CLI:
+///
+/// - network errors, timeouts and 5xx are transient: exponential
+///   backoff (1s, 2s, 4s);
+/// - secondary rate limits honor GitHub's `Retry-After` when it is
+///   short enough to wait for, with a small backoff otherwise;
+/// - primary rate limits are only retried when the quota resets
+///   almost immediately — an exhausted hourly quota is minutes or
+///   hours away, and retrying it just burns the remaining budget and
+///   risks abuse detection. Fail fast with the actionable message.
+const RATE_LIMIT_WAIT_CAP: Duration = Duration::from_secs(10);
+
+fn retry_wait(err: &ApiError, attempt: u32) -> Option<Duration> {
+    let backoff = Duration::from_secs(1 << attempt.min(2));
+    match err {
+        ApiError::Network { .. } => Some(backoff),
+        ApiError::Server { .. } => Some(backoff),
+        ApiError::SecondaryRateLimit {
+            what: _,
+            retry_after,
+        } => match retry_after {
+            Some(wait) if *wait <= RATE_LIMIT_WAIT_CAP => Some(*wait),
+            Some(_) => None,
+            None => Some(backoff),
+        },
+        ApiError::RateLimited { resets_in, .. } => match resets_in {
+            Some(wait) if *wait <= RATE_LIMIT_WAIT_CAP => Some(*wait),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Build the Search API query for open, unassigned `good first issue`s.
 ///
 /// The language is quoted so multi-word names such as `Jupyter Notebook`
@@ -484,6 +521,90 @@ mod tests {
     fn issue_query_keeps_multi_word_languages_together() {
         assert!(issue_query("Jupyter Notebook", "good first issue")
             .contains(r#"language:"Jupyter Notebook""#));
+    }
+
+    #[test]
+    fn network_errors_back_off_exponentially() {
+        let err = ApiError::Network {
+            what: "op".into(),
+            message: "boom".into(),
+            timeout: false,
+        };
+        assert_eq!(retry_wait(&err, 0), Some(Duration::from_secs(1)));
+        assert_eq!(retry_wait(&err, 1), Some(Duration::from_secs(2)));
+        assert_eq!(retry_wait(&err, 2), Some(Duration::from_secs(4)));
+        // Stays bounded instead of overflowing into absurd waits.
+        assert_eq!(retry_wait(&err, 9), Some(Duration::from_secs(4)));
+    }
+
+    #[test]
+    fn server_errors_are_retried_with_backoff() {
+        let err = ApiError::Server {
+            what: "op".into(),
+            status: 502,
+        };
+        assert_eq!(retry_wait(&err, 0), Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn exhausted_quotas_fail_fast_instead_of_hammering() {
+        let err = ApiError::RateLimited {
+            what: "op".into(),
+            resets_in: Some(Duration::from_secs(900)),
+            authenticated: false,
+        };
+        assert_eq!(retry_wait(&err, 0), None);
+
+        let unknown = ApiError::RateLimited {
+            what: "op".into(),
+            resets_in: None,
+            authenticated: true,
+        };
+        assert_eq!(retry_wait(&unknown, 0), None);
+    }
+
+    #[test]
+    fn brief_rate_limit_windows_are_retried() {
+        let err = ApiError::RateLimited {
+            what: "op".into(),
+            resets_in: Some(Duration::from_secs(5)),
+            authenticated: true,
+        };
+        assert_eq!(retry_wait(&err, 0), Some(Duration::from_secs(5)));
+    }
+
+    #[test]
+    fn secondary_limits_honor_a_short_retry_after() {
+        let short = ApiError::SecondaryRateLimit {
+            what: "op".into(),
+            retry_after: Some(Duration::from_secs(3)),
+        };
+        assert_eq!(retry_wait(&short, 0), Some(Duration::from_secs(3)));
+
+        let long = ApiError::SecondaryRateLimit {
+            what: "op".into(),
+            retry_after: Some(Duration::from_secs(30)),
+        };
+        assert_eq!(retry_wait(&long, 0), None);
+
+        let unknown = ApiError::SecondaryRateLimit {
+            what: "op".into(),
+            retry_after: None,
+        };
+        assert_eq!(retry_wait(&unknown, 0), Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn client_errors_are_never_retried() {
+        let not_found = ApiError::NotFound { what: "op".into() };
+        let unauthorized = ApiError::Unauthorized { what: "op".into() };
+        let forbidden = ApiError::Forbidden {
+            what: "op".into(),
+            message: "SAML".into(),
+        };
+        for err in [not_found, unauthorized, forbidden] {
+            assert_eq!(retry_wait(&err, 0), None, "{err}");
+        }
     }
 }
 

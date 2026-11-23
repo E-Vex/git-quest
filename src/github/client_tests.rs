@@ -372,3 +372,58 @@ async fn an_undecodable_body_is_reported_as_such() {
         .unwrap_err();
     assert!(err.to_string().contains("could not decode"), "{err}");
 }
+
+#[tokio::test]
+async fn a_transient_server_error_is_retried_until_success() {
+    let server = MockServer::start().await;
+    // Mount order matters: wiremock matches mounted mocks in mount
+    // order, so the 502 stub (limited to one hit) shadows the 200 stub
+    // exactly once.
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(502).set_body_string("bad gateway"))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "total_count": 7 })))
+        .mount(&server)
+        .await;
+
+    let count = client_for(&server, None)
+        .merged_pr_count("o")
+        .await
+        .unwrap();
+    assert_eq!(count, 7);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn an_exhausted_quota_fails_fast_instead_of_hammering() {
+    let server = MockServer::start().await;
+    let reset = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 900;
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(403)
+                .insert_header("x-ratelimit-remaining", "0")
+                .insert_header("x-ratelimit-reset", reset.to_string().as_str())
+                .set_body_json(json!({ "message": "API rate limit exceeded for 1.2.3.4" })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = api_error(
+        client_for(&server, None)
+            .merged_pr_count("o")
+            .await
+            .unwrap_err(),
+    );
+    assert!(matches!(err, ApiError::RateLimited { .. }));
+    // Exactly one request: the error is surfaced immediately, the retry
+    // loop does not burn the remaining quota with doomed re-attempts.
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
