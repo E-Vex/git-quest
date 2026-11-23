@@ -44,13 +44,11 @@ pub fn username(input: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-/// Validate a programming language name for use in a `language:"…"`
-/// search qualifier.
+/// Validate a label name for use in a `label:"…"` search qualifier.
 ///
-/// Spaces and symbols are fine (`C++`, `C#`, `Jupyter Notebook`); control
+/// Spaces are fine (`good first issue`, `help wanted`); control
 /// characters and double quotes are not, because the value is wrapped in
 /// quotes and a stray quote would end the qualifier early.
-/// Validate a label name for use in a `label:"…"` search qualifier.
 pub fn label(input: &str) -> Result<String, String> {
     let label_str = input.trim();
 
@@ -170,6 +168,38 @@ mod tests {
     fn rejects_quotes_and_control_characters_in_language() {
         for bad in ["rust\" label:bug", "ru\nst", "ru\tst", "\"rust\""] {
             assert!(language(bad).is_err(), "{bad:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn accepts_real_label_names() {
+        for ok in ["good first issue", "help wanted", "bug", "documentation"] {
+            assert_eq!(label(ok).as_deref(), Ok(ok), "{ok}");
+        }
+    }
+
+    #[test]
+    fn label_is_trimmed() {
+        assert_eq!(label("  help wanted \n").unwrap(), "help wanted");
+    }
+
+    #[test]
+    fn rejects_empty_or_oversized_label() {
+        assert!(label("").is_err());
+        assert!(label("   ").is_err());
+        assert!(label(&"x".repeat(51)).is_err());
+        assert!(label(&"x".repeat(50)).is_ok());
+    }
+
+    #[test]
+    fn rejects_quotes_and_control_characters_in_label() {
+        for bad in [
+            "good\" issue",
+            "good\nissue",
+            "good\tissue",
+            "\"help wanted\"",
+        ] {
+            assert!(label(bad).is_err(), "{bad:?} should be rejected");
         }
     }
 }
