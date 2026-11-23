@@ -64,7 +64,11 @@ Scope: full architecture review, bug fixing, roadmap completion.
 
 - Release workflow upgraded from a single Ubuntu binary to a matrix
   (Linux x86_64, macOS Apple Silicon, Windows x86_64) with sha256
-  checksums, plus fmt/clippy gates before packaging.
+  checksums, plus fmt/clippy gates before packaging. First run failed at
+  the upload step: the rewrite had dropped the original
+  `permissions: contents: write` block, so `action-gh-release` could not
+  create the release — restored, tag re-cut, release verified with all
+  six assets (three binaries + checksums).
 - Dependabot branches `clap-4.6.8` and `clap_complete-4.6.12` merged.
 
 ### Verification
