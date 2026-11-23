@@ -5,6 +5,107 @@ Product-facing changes live in the [CHANGELOG](../CHANGELOG.md); this file
 records the reasoning behind them so future maintainers can follow the
 decisions.
 
+## 2026-11-23 — v0.3.0 pass
+
+Scope: the quality pass suggested at the end of v0.2.1 — `track --watch`
+plus a `hunt` freshness filter. crates.io / Homebrew publishing still
+requires maintainer credentials and remains open on the roadmap.
+
+### `track --watch` — design decisions
+
+1. **Interval floors come from quota math, not taste** (`feat(track)`)
+   One refresh costs 3 requests without a token (two Search API calls +
+   the repository listing) and 4 with (plus GraphQL). GitHub's limits are
+   60 core requests/hour unauthenticated and 30 Search requests/minute
+   authenticated, so the safe minimums are 180s and 20s respectively — an
+   unauthenticated 10s interval would burn the hourly core quota in about
+   four minutes. `parse_interval` accepts `s`/`m`/`h` suffixes, rejects
+   zero (a watch that never sleeps hammers the API) and caps at 24h (one
+   that sleeps a day is not a watch). Multibyte suffix lookalikes fall
+   into the bare-number path and produce a clean error, never a panic on
+   a UTF-8 boundary.
+
+2. **The username is resolved once, not per refresh**
+   `track` without a username resolves the token owner through `/user`;
+   doing that every refresh would waste one request per poll, so the
+   watch resolves before the loop starts. This required exposing
+   `progress::resolve_username` to the crate.
+
+3. **Delta honesty: failed sources produce no delta** (`feat(track)`)
+   When a source fails, `fetch()` reports the achievement as 0 (the
+   documented partial-results contract). A naive diff would display
+   "↓66 merged PRs" after a single 500 — a fabricated regression.
+   `ProgressReport` now records which achievement sources failed
+   (`failed`, crate-internal), `compute_deltas` skips them, and counts
+   that appeared or disappeared between snapshots are skipped too (no
+   honest comparison exists).
+
+4. **Partial state is rendered inside the frame**
+   The interactive frame clears the screen on every redraw, which would
+   wipe the stderr warnings `fetch()` prints — so the frame repeats a
+   compact "partial data" line itself when `errors` is non-empty.
+
+5. **JSON watch mode is NDJSON, not pretty JSON**
+   One compact object per refresh: `event: "refresh"` carries the same
+   fields as `track --json` plus `deltas`, `interval_secs` and
+   `refreshed_at`; a failed refresh emits `event: "refresh_failed"` with
+   the error and the retry cadence. A subtle bug surfaced in testing: the
+   event selection initially keyed off the retained report instead of
+   what happened on the current refresh, which made `refresh_failed` dead
+   code — the loop test observed 12 requests (4 attempts × 3 sources)
+   followed by a full `refresh` event, and the match now keys off the
+   current outcome.
+
+6. **Interactive vs piped output**
+   Screen clearing and the per-second countdown only run when stdout is a
+   terminal and `--json` is off; piped output renders one frame per
+   refresh (grep-able, log-friendly) and never emits clear sequences.
+   Ctrl+C is handled through `tokio::signal` (the new `signal` feature
+   pulls `signal-hook-registry`/`errno` into the lock; no MSRV impact,
+   verified by building on 1.85) and exits 0 with a summary line.
+
+### `hunt --max-age` — why and how
+
+The README's own example result was dated 2021; a `good first issue`
+labelled years ago is usually not one anymore. `--max-age N` appends
+`created:>=<date>`. Computing the date needs calendar math; to avoid
+pulling a date crate into a deliberately lean dependency tree (the MSRV
+history in this file shows why every new crate matters), the
+implementation is Howard Hinnant's `civil_from_days` — a dozen lines of
+pure integer math, tested against independently verified vectors
+including a leap day and a year boundary.
+
+### Deliberately not done
+
+- **More achievements (Quickdraw et al.)** — considered and rejected.
+  GitHub exposes no achievements API, and every countable approximation
+  is unfaithful: Quickdraw needs item-level created/closed timestamps and
+  is capped by the Search API's 1000-result window, so a badge earned
+  years ago would read as "not unlocked" — exactly the "silent lie" class
+  of bug this project keeps fixing. The four tracked achievements are the
+  ones with reliable API queries; revisit only if GitHub ships real
+  achievement data.
+- crates.io / Homebrew publishing — still requires maintainer credentials.
+
+### Verification
+
+- 139 tests (25 new): interval parsing/floors, delta computation
+  (including the failed-source case), NDJSON event shapes, the full watch
+  loop against a mock API (two-refresh delta, mid-watch total failure,
+  first-refresh hard error, non-interactive text frames), watch frame
+  rendering (countdown, cadence, partial state, gold-complete, colored ==
+  plain layout), and the `created:>=` qualifier with date vectors.
+- `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo build
+  --locked` green on stable (1.100); `cargo +1.85 build --locked` green
+  on the MSRV toolchain.
+- Live smoke tests against api.github.com: `check`, `track --watch
+  --json` (NDJSON event), `track --watch` piped (one frame per refresh,
+  no clear sequences), the interactive TTY countdown (via a pty: "next
+  refresh in 19s → 18s → …", five screen clears in six seconds), both
+  interval-floor rejections, `hunt --max-age 90` (5,894 fresh results,
+  newest 2026-11-06) and a real SIGINT (exit 0, "watch stopped after 1
+  refresh(es)").
+
 ## 2026-11-23 — v0.2.1 pass
 
 Scope: quality sweep after the v0.2.0 release — bugs found by re-reading

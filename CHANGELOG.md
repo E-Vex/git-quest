@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.3.0
+
+### Features
+
+- `track --watch`: a live dashboard — the track report re-fetches on an
+  interval (default 60s), highlights what changed since the previous
+  refresh (`↑2` / `↓1` next to the achievement), shows a countdown to the
+  next refresh and exits cleanly on Ctrl+C. A refresh that fails keeps the
+  previous snapshot on screen and explains why it did not move; the first
+  refresh failing is still a hard error, exactly like the one-shot report.
+- `--interval` for `--watch` (`90s`, `5m`, `2h` — bare numbers are
+  seconds), with enforced floors that protect the quota: 20s with a token,
+  180s without (one refresh costs 3–4 requests and the unauthenticated
+  core quota is only 60 requests/hour). Faster intervals are rejected with
+  the quota math in the message.
+- `track --watch --json`: one NDJSON event per refresh — `event: "refresh"`
+  carries the same fields as `track --json` plus `deltas`, `interval_secs`
+  and `refreshed_at`; a failed refresh emits `event: "refresh_failed"`.
+- `hunt --max-age <days>`: only issues created within the last N days
+  (`created:>=<date>` qualifier), because a `good first issue` labelled
+  years ago is usually not one anymore. The JSON output reports the
+  filter as `max_age_days`.
+
+### Notes
+
+- Delta chips are suppressed for achievements whose source failed in the
+  current refresh: their 0 is a placeholder, not an observation, so a
+  single 500 can never be displayed as a fabricated `↓N`. Partial state is
+  also rendered inside the watch frame — the screen clear would otherwise
+  wipe the stderr warnings.
+
 ## v0.2.1
 
 ### Fixes

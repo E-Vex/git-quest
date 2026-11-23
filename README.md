@@ -63,11 +63,14 @@ Achievement progress for E-Vex
 git-quest hunt --lang rust                  # top 3, sorted by community reactions
 git-quest hunt --lang go --limit 5          # more results
 git-quest hunt --lang python --sort created # freshest first
+git-quest hunt --lang rust --max-age 90     # only issues opened in the last 90 days
 ```
 
 Results are real issues only (`is:issue`) in repositories that still
 accept contributions (`archived:false`); PRs and archived repos are
-filtered out automatically.
+filtered out automatically. A `good first issue` labelled years ago is
+usually not one anymore — `--max-age N` cuts the search off at issues
+created within the last N days.
 
 ```text
 🎯 Hunt — good first issues for `rust`
@@ -93,6 +96,41 @@ git-quest track                     # token owner (needs GITHUB_TOKEN)
 Further out:
  🦈 Pull Shark 62 merged PRs remaining (66/128 to Silver)
 ```
+
+### `track --watch` — a live dashboard
+
+```bash
+git-quest track --watch                     # refresh every 60s until Ctrl+C
+git-quest track --watch --interval 5m       # slower cadence (90s, 5m, 2h, …)
+git-quest track --watch --json              # one JSON event per refresh (NDJSON)
+git-quest track --watch --reach 10          # widen the window, then watch it
+```
+
+On a terminal the frame is redrawn with a countdown and highlights what
+changed since the previous refresh (`↑1` next to the achievement):
+
+```text
+🎯 Track — watching E-Vex (reach ≤5, every 5m)
+next refresh in 4m53s · Ctrl+C to stop
+
+ 1. 👥 Pair Extraordinaire ↑1 5 co-authored commits remaining (5/10 to Bronze)
+
+Further out:
+ ⭐ Starstruck 12 stars remaining (4/16 to unlock)
+```
+
+- One refresh costs 3–4 API requests, so the interval has enforced
+  floors: **20s with a token, 180s without** (the unauthenticated core
+  quota is only 60 requests/hour). Anything faster is rejected with the
+  quota math in the message.
+- A refresh that fails keeps the previous snapshot on screen and says so;
+  the first refresh failing is a hard error, exactly like the one-shot
+  report. Ctrl+C exits cleanly with a summary.
+- `--watch --json` emits one compact JSON object per line: `event:
+  "refresh"` carries the same fields as `track --json` plus `deltas` and
+  `interval_secs`; a failed refresh emits `event: "refresh_failed"`.
+  Counts whose source failed in that refresh are never given a delta —
+  their 0 is a placeholder, not an observation.
 
 ## Achievements tracked
 
@@ -146,7 +184,9 @@ git-quest complete bash > /etc/bash_completion.d/git-quest  # shell completions
 
 - [x] v0.1.0 — `check` + `hunt`
 - [x] v0.2.0 — `track`: watch your progress, see when a tier is within reach
+- [x] v0.3.0 — `track --watch`: a live dashboard with deltas and quota-safe intervals
 - [x] `hunt --label`
+- [x] `hunt --max-age`: freshness filter
 - [x] `--json`
 - [x] `check` without name
 - [x] `complete`
