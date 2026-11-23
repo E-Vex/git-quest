@@ -336,6 +336,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fetch_reports_a_missing_user_instead_of_rendering_zeros() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/users/ghost/repos"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "message": "Not Found"
+            })))
+            .mount(&server)
+            .await;
+
+        let err = fetch(&mock_client(&server, None), "ghost")
+            .await
+            .unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("does not exist"), "{text}");
+        assert!(text.contains("check the spelling"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn fetch_fails_when_every_source_fails() {
+        let server = MockServer::start().await;
+        for verb in ["GET", "POST"] {
+            Mock::given(method(verb))
+                .respond_with(ResponseTemplate::new(403))
+                .mount(&server)
+                .await;
+        }
+
+        let err = fetch(&mock_client(&server, Some("t")), "octocat")
+            .await
+            .unwrap_err();
+        // The first recorded source failure is surfaced as the cause.
+        assert!(err.to_string().contains("Pull Shark unavailable"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn fetch_keeps_a_partial_report_when_one_source_fails() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/search/issues"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "total_count": 10,
+                "items": []
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/users/octocat/repos"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(vec![
+                serde_json::json!({"full_name": "o/hello", "stargazers_count": 20}),
+            ]))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/search/commits"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "total_count": 3
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&server)
+            .await;
+
+        let report = fetch(&mock_client(&server, Some("t")), "octocat")
+            .await
+            .unwrap();
+        assert_eq!(report.errors.len(), 1, "{:?}", report.errors);
+        assert!(report.errors[0].contains("Galaxy Brain unavailable"));
+        assert!(
+            !report.items.iter().any(|p| p.def.name == "Galaxy Brain"),
+            "a failed source is omitted, not faked as zero"
+        );
+        let names: Vec<_> = report.items.iter().map(|p| p.def.name).collect();
+        assert_eq!(names, ["Pull Shark", "Starstruck", "Pair Extraordinaire"]);
+    }
+
+    #[tokio::test]
     async fn fetch_without_a_username_needs_a_token() {
         let server = MockServer::start().await;
 
