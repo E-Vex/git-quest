@@ -1,111 +1,33 @@
-use crate::achievements::{Progress, GALAXY_BRAIN, PAIR_EXTRAORDINAIRE, PULL_SHARK, STARSTRUCK};
 use crate::display::{self, Palette};
 use crate::github::GithubClient;
+use crate::progress::{self, ProgressReport};
 use anyhow::Result;
 
 pub async fn run(username: &str, pal: Palette, json: bool) -> Result<()> {
     let client = GithubClient::new()?;
-
-    let username = if username.is_empty() {
-        match client.authenticated_user().await {
-            Some(name) => name,
-            None => anyhow::bail!(
-                "no username provided and no GITHUB_TOKEN configured for authentication"
-            ),
-        }
-    } else {
-        username.to_string()
-    };
-
-    let (prs_result, stars_result, answers_result, coauthored_result) = tokio::join!(
-        client.merged_pr_count(&username),
-        client.top_repo_stars(&username),
-        client.accepted_discussion_answers(&username),
-        client.coauthored_commit_count(&username),
-    );
-    let prs = match prs_result {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("⚠️  Pull Shark unavailable: {e}");
-            0
-        }
-    };
-    let (star_repo, stars) = match stars_result {
-        Ok(Some((repo, s))) => (Some(repo), s),
-        Ok(None) => (None, 0),
-        Err(e) => {
-            eprintln!("⚠️  Starstruck unavailable: {e}");
-            (None, 0)
-        }
-    };
-    let answers = match answers_result {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("⚠️  Galaxy Brain unavailable: {e}");
-            None
-        }
-    };
-    let coauthored = match coauthored_result {
-        Ok(v) => Some(v),
-        Err(e) => {
-            eprintln!("⚠️  Pair Extraordinaire unavailable: {e}");
-            None
-        }
-    };
-
-    let mut items = vec![
-        Progress {
-            def: &PULL_SHARK,
-            current: prs,
-            detail: None,
-        },
-        Progress {
-            def: &STARSTRUCK,
-            current: stars,
-            detail: star_repo.map(|repo| format!("best repo: {repo}")),
-        },
-    ];
-    if let Some(a) = answers {
-        items.push(Progress {
-            def: &GALAXY_BRAIN,
-            current: a,
-            detail: None,
-        });
-    }
-    if let Some(c) = coauthored {
-        items.push(Progress {
-            def: &PAIR_EXTRAORDINAIRE,
-            current: c,
-            detail: None,
-        });
-    }
+    let report: ProgressReport = progress::fetch(&client, username).await?;
 
     if json {
-        let achievements: Vec<_> = items.iter().map(|p| {
-            serde_json::json!({
-                "name": p.def.name,
-                "emoji": p.def.emoji,
-                "current": p.current,
-                "next_tier": p.next_tier().map(|(t, th)| serde_json::json!({"tier": t.name(), "threshold": th})),
-                "remaining": p.remaining(),
-                "fraction": p.fraction(),
-                "detail": p.detail,
-            })
-        }).collect();
+        let achievements: Vec<_> = report
+            .items
+            .iter()
+            .map(progress::achievement_json)
+            .collect();
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
-                "username": username,
-                "has_token": client.has_token(),
+                "username": report.username,
+                "has_token": report.has_token,
+                // `partial` marks runs where a source failed: the affected
+                // counts are 0 or omitted, never inflated.
+                "partial": !report.errors.is_empty(),
+                "errors": report.errors,
                 "achievements": achievements,
             }))
             .unwrap()
         );
     } else {
-        print!(
-            "{}",
-            display::render_check(&username, &items, client.has_token(), pal)
-        );
+        print!("{}", display::render_check(&report, pal));
     }
     Ok(())
 }

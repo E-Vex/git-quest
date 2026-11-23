@@ -73,6 +73,7 @@ pub const PAIR_EXTRAORDINAIRE: AchievementDef = AchievementDef {
 };
 
 /// Live progress of one achievement.
+#[derive(Clone)]
 pub struct Progress {
     pub def: &'static AchievementDef,
     pub current: u64,

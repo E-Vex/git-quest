@@ -43,6 +43,20 @@ pub enum Command {
         #[arg(value_parser = crate::validate::username)]
         username: Option<String>,
     },
+    /// Show achievement tiers within reach (what to do next)
+    Track {
+        /// GitHub username to analyze (e.g. octocat); omit for the token owner
+        #[arg(value_parser = crate::validate::username)]
+        username: Option<String>,
+        /// Flag tiers needing at most this many more steps
+        #[arg(
+            short = 'r',
+            long,
+            default_value_t = 5,
+            value_parser = clap::value_parser!(u8).range(1..=100)
+        )]
+        reach: u8,
+    },
     /// Generate a progress block for your profile README
     Readme {
         /// GitHub username to analyze (e.g. octocat); omit for the token owner

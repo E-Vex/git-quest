@@ -1,6 +1,7 @@
 use crate::achievements::{Progress, Tier};
 use crate::cli::ColorWhen;
 use crate::github::IssueItem;
+use crate::progress::ProgressReport;
 use owo_colors::OwoColorize;
 use std::ffi::OsStr;
 use std::fmt::Write as _;
@@ -103,36 +104,45 @@ fn bar(frac: f64) -> String {
     format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
+/// Status text for the next tier: `"72/128 to Silver"`,
+/// `"0/16 to unlock"` or `"GOLD COMPLETE"`.
+fn next_status(p: &Progress) -> String {
+    match p.next_tier() {
+        Some((tier, threshold)) => match tier {
+            Tier::Default => format!("{}/{} to unlock", p.current, threshold),
+            _ => format!("{}/{} to {tier}", p.current, threshold),
+        },
+        None => "GOLD COMPLETE".to_string(),
+    }
+}
+
+/// Remaining-count text: `"56 merged PRs remaining"` or the
+/// gold-complete celebration.
+fn remaining_line(p: &Progress) -> String {
+    match p.next_tier() {
+        Some(_) => format!("{} {} remaining", p.remaining(), p.def.unit),
+        None => "🏆 every tier achieved".to_string(),
+    }
+}
+
 /// Render the `check` command results.
-pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Palette) -> String {
+pub fn render_check(report: &ProgressReport, pal: Palette) -> String {
     let mut out = String::new();
     out.push('\n');
     let _ = writeln!(
         out,
         "{}",
-        pal.bold(format!("Achievement progress for {username}"))
+        pal.bold(format!("Achievement progress for {}", report.username))
     );
     out.push('\n');
-    for p in items {
+    for p in &report.items {
         let name = format!("{:<19}", p.def.name);
         let frac = p.fraction();
-        let (status, remaining) = match p.next_tier() {
-            Some((tier, threshold)) => (
-                match tier {
-                    Tier::Default => format!("{}/{} to unlock", p.current, threshold),
-                    _ => format!("{}/{} to {}", p.current, threshold, tier),
-                },
-                format!("{} {} remaining", p.remaining(), p.def.unit),
-            ),
-            None => (
-                "GOLD COMPLETE".to_string(),
-                "🏆 every tier achieved".to_string(),
-            ),
-        };
-        let remaining = match &p.detail {
-            Some(detail) => format!("{remaining} · {detail}"),
-            None => remaining,
-        };
+        let status = next_status(p);
+        let mut remaining = remaining_line(p);
+        if let Some(detail) = &p.detail {
+            remaining = format!("{remaining} · {detail}");
+        }
         let _ = writeln!(
             out,
             "{} {}  {}{}  {}",
@@ -151,7 +161,7 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Pa
         "{}",
         pal.cyan("💡 Tip: hunt contribution opportunities with `git-quest hunt --lang <lang>`")
     );
-    if !has_token {
+    if !report.has_token {
         let _ = writeln!(
             out,
             "{}",
@@ -163,24 +173,23 @@ pub fn render_check(username: &str, items: &[Progress], has_token: bool, pal: Pa
 }
 
 /// Render a markdown progress block suitable for a profile README.
-pub fn render_readme(username: &str, items: &[Progress], _pal: Palette) -> String {
+pub fn render_readme(report: &ProgressReport) -> String {
     let mut out = String::new();
     out.push_str("<!-- git-quest -->\n");
-    out.push_str(&format!("## GitHub Achievements — {username}\n\n"));
-    for p in items {
+    out.push_str(&format!("## GitHub Achievements — {}\n\n", report.username));
+    for p in &report.items {
         let frac = p.fraction();
         let bar_str = bar(frac);
         // One clean status line, mirroring `render_check`: the count is
         // never repeated and the tier name appears exactly once.
-        let status = match p.next_tier() {
-            Some((tier, threshold)) => match tier {
-                Tier::Default => format!("{}/{} to unlock", p.current, threshold),
-                _ => format!("{}/{} to {tier}", p.current, threshold),
-            },
-            None => "GOLD COMPLETE 🏆".to_string(),
+        let status = next_status(p);
+        let status = if p.next_tier().is_none() {
+            format!("{status} 🏆")
+        } else {
+            status
         };
         let remaining = match p.next_tier() {
-            Some(_) => format!("{} {} remaining", p.remaining(), p.def.unit),
+            Some(_) => remaining_line(p),
             None => "every tier achieved".to_string(),
         };
         let detail_part = match &p.detail {
@@ -193,6 +202,100 @@ pub fn render_readme(username: &str, items: &[Progress], _pal: Palette) -> Strin
         ));
     }
     out.push_str("<!-- /git-quest -->\n");
+    out
+}
+
+/// Render the `track` command results: the tiers within reach first,
+/// then everything else as targets further out.
+pub fn render_track(report: &ProgressReport, reach: u8, pal: Palette) -> String {
+    let mut out = String::new();
+    out.push('\n');
+
+    if report.items.iter().all(|p| p.next_tier().is_none()) {
+        let _ = writeln!(
+            out,
+            "{}",
+            pal.bold(format!(
+                "🏆 Every tracked achievement is GOLD COMPLETE for {}",
+                report.username
+            ))
+        );
+        out.push('\n');
+        return out;
+    }
+
+    let (within, further) = report.tiers_by_proximity(reach);
+    let header = if within.is_empty() {
+        format!(
+            "🎯 Track — nothing within reach (≤{reach} more) for {}",
+            report.username
+        )
+    } else {
+        format!(
+            "🎯 Track — tiers within reach (≤{reach} more) for {}",
+            report.username
+        )
+    };
+    let _ = writeln!(out, "{}", pal.bold(header));
+    out.push('\n');
+
+    for (i, p) in within.iter().enumerate() {
+        let _ = writeln!(
+            out,
+            " {}. {} {} {} ({})",
+            i + 1,
+            p.def.emoji,
+            pal.bold(p.def.name),
+            pal.paint(remaining_line(p), p.fraction()),
+            next_status(p)
+        );
+    }
+
+    if !within.is_empty() && !further.is_empty() {
+        out.push('\n');
+        let _ = writeln!(out, "{}", pal.dim("Further out:"));
+        for p in &further {
+            let _ = writeln!(
+                out,
+                " {} {} {} ({})",
+                pal.dim(p.def.emoji),
+                pal.dim(p.def.name),
+                pal.dim(remaining_line(p)),
+                pal.dim(next_status(p))
+            );
+        }
+    } else if within.is_empty() {
+        // Nothing within reach: number the closest targets instead.
+        for (i, p) in further.iter().enumerate() {
+            let _ = writeln!(
+                out,
+                " {}. {} {} {} ({})",
+                i + 1,
+                p.def.emoji,
+                pal.bold(p.def.name),
+                pal.paint(remaining_line(p), p.fraction()),
+                next_status(p)
+            );
+        }
+    }
+
+    out.push('\n');
+    if within.is_empty() {
+        let _ = writeln!(
+            out,
+            "{}",
+            pal.cyan("💡 Tip: hunt contribution opportunities with `git-quest hunt --lang <lang>`")
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "{}",
+            pal.cyan(
+                "💡 Ship a small, focused PR today — the closest tier is within your grasp. 🚀"
+            )
+        );
+    }
+    out.push('\n');
     out
 }
 
@@ -269,6 +372,15 @@ mod tests {
         }
     }
 
+    fn report(has_token: bool, items: Vec<Progress>) -> ProgressReport {
+        ProgressReport {
+            username: "octocat".into(),
+            has_token,
+            items,
+            errors: Vec::new(),
+        }
+    }
+
     fn issue(n: u64) -> IssueItem {
         IssueItem {
             title: format!("Issue {n}"),
@@ -303,20 +415,20 @@ mod tests {
     #[test]
     fn plain_output_contains_no_escape_sequences() {
         let items = [progress(&PULL_SHARK, 72)];
-        assert!(!render_check("octocat", &items, false, plain()).contains('\x1b'));
+        assert!(!render_check(&report(false, items.to_vec()), plain()).contains('\x1b'));
         assert!(!render_hunt("rust", "good first issue", 1, &[issue(1)], plain()).contains('\x1b'));
     }
 
     #[test]
     fn colored_output_emits_escape_sequences() {
         let items = [progress(&PULL_SHARK, 72)];
-        assert!(render_check("octocat", &items, false, Palette::new(true)).contains("\x1b["));
+        assert!(render_check(&report(false, items.to_vec()), Palette::new(true)).contains("\x1b["));
     }
 
     #[test]
     fn check_shows_next_tier_and_remaining_count() {
         let items = [progress(&PULL_SHARK, 72)];
-        let out = render_check("octocat", &items, true, plain());
+        let out = render_check(&report(true, items.to_vec()), plain());
         assert!(out.contains("Achievement progress for octocat"));
         assert!(out.contains("Pull Shark"));
         assert!(out.contains("72/128 to Silver"));
@@ -326,14 +438,14 @@ mod tests {
     #[test]
     fn check_calls_the_first_level_unlock() {
         let items = [progress(&STARSTRUCK, 0)];
-        let out = render_check("octocat", &items, true, plain());
+        let out = render_check(&report(true, items.to_vec()), plain());
         assert!(out.contains("0/16 to unlock"), "{out}");
     }
 
     #[test]
     fn check_reports_gold_as_complete() {
         let items = [progress(&PULL_SHARK, 5000)];
-        let out = render_check("octocat", &items, true, plain());
+        let out = render_check(&report(true, items.to_vec()), plain());
         assert!(out.contains("GOLD COMPLETE"));
         assert!(out.contains("every tier achieved"));
     }
@@ -344,15 +456,15 @@ mod tests {
             detail: Some("best repo: octocat/hello".into()),
             ..progress(&STARSTRUCK, 4)
         }];
-        let out = render_check("octocat", &items, true, plain());
+        let out = render_check(&report(true, items.to_vec()), plain());
         assert!(out.contains("12 stars remaining · best repo: octocat/hello"));
     }
 
     #[test]
     fn check_hints_at_a_token_only_when_there_is_none() {
         let items = [progress(&PULL_SHARK, 1)];
-        assert!(render_check("o", &items, false, plain()).contains("GITHUB_TOKEN"));
-        assert!(!render_check("o", &items, true, plain()).contains("GITHUB_TOKEN"));
+        assert!(render_check(&report(false, items.to_vec()), plain()).contains("GITHUB_TOKEN"));
+        assert!(!render_check(&report(true, items.to_vec()), plain()).contains("GITHUB_TOKEN"));
     }
 
     #[test]
@@ -362,7 +474,7 @@ mod tests {
             progress(&STARSTRUCK, 1),
             progress(&PAIR_EXTRAORDINAIRE, 1),
         ];
-        let out = render_check("o", &items, true, plain());
+        let out = render_check(&report(true, items.to_vec()), plain());
         for name in ["Pull Shark", "Starstruck", "Pair Extraordinaire"] {
             assert_eq!(
                 out.lines().filter(|l| l.contains(name)).count(),
@@ -382,7 +494,7 @@ mod tests {
     #[test]
     fn readme_names_the_user_and_wraps_in_markers() {
         let items = [progress(&PULL_SHARK, 72)];
-        let out = render_readme("octocat", &items, plain());
+        let out = render_readme(&report(true, items.to_vec()));
         assert!(out.starts_with("<!-- git-quest -->\n"));
         assert!(out.contains("## GitHub Achievements — octocat"));
         assert!(out.trim_end().ends_with("<!-- /git-quest -->"));
@@ -391,7 +503,7 @@ mod tests {
     #[test]
     fn readme_status_is_not_duplicated_or_garbled() {
         let items = [progress(&PULL_SHARK, 72)];
-        let out = render_readme("octocat", &items, plain());
+        let out = render_readme(&report(true, items.to_vec()));
         // The old renderer produced "72/128 to 128 to Silver"; each tier
         // name and threshold must appear exactly once per line.
         assert!(out.contains("72/128 to Silver"), "{out}");
@@ -402,7 +514,7 @@ mod tests {
     #[test]
     fn readme_uses_unlock_wording_for_the_default_tier() {
         let items = [progress(&STARSTRUCK, 4)];
-        let out = render_readme("octocat", &items, plain());
+        let out = render_readme(&report(true, items.to_vec()));
         assert!(out.contains("4/16 to unlock"), "{out}");
         assert!(out.contains("12 stars remaining"), "{out}");
     }
@@ -416,7 +528,7 @@ mod tests {
                 ..progress(&STARSTRUCK, 4)
             },
         ];
-        let out = render_readme("octocat", &items, plain());
+        let out = render_readme(&report(true, items.to_vec()));
         assert!(out.contains("GOLD COMPLETE 🏆"), "{out}");
         assert!(out.contains("· best repo: octocat/hello"), "{out}");
     }
@@ -468,6 +580,65 @@ mod tests {
     }
 
     #[test]
+    fn track_lists_tiers_within_reach_first() {
+        let items = [
+            progress(&PULL_SHARK, 11),         // 5 remaining → within reach of 5
+            progress(&STARSTRUCK, 0),          // 16 remaining → further out
+            progress(&PAIR_EXTRAORDINAIRE, 8), // 2 remaining → within reach, closest
+        ];
+        let out = render_track(&report(true, items.to_vec()), 5, plain());
+        assert!(
+            out.contains("tiers within reach (≤5 more) for octocat"),
+            "{out}"
+        );
+        assert!(out.contains(" 1. 👥 Pair Extraordinaire"), "{out}");
+        assert!(out.contains(" 2. 🦈 Pull Shark"), "{out}");
+        assert!(
+            out.contains("2 co-authored commits remaining (8/10 to Bronze)"),
+            "{out}"
+        );
+        assert!(out.contains("Further out:"), "{out}");
+        assert!(out.contains("⭐ Starstruck"), "{out}");
+    }
+
+    #[test]
+    fn track_says_when_nothing_is_within_reach() {
+        let items = [progress(&PULL_SHARK, 0)];
+        let out = render_track(&report(true, items.to_vec()), 1, plain());
+        assert!(out.contains("nothing within reach (≤1 more)"), "{out}");
+        assert!(out.contains(" 1. 🦈 Pull Shark"), "{out}");
+        assert!(
+            out.contains("2 merged PRs remaining (0/2 to unlock)"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn track_celebrates_a_gold_complete_report() {
+        let items = [progress(&PULL_SHARK, 5000)];
+        let out = render_track(&report(true, items.to_vec()), 5, plain());
+        assert!(
+            out.contains("Every tracked achievement is GOLD COMPLETE"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn track_excludes_gold_from_the_lists() {
+        let items = [progress(&PULL_SHARK, 5000), progress(&STARSTRUCK, 12)];
+        let out = render_track(&report(true, items.to_vec()), 5, plain());
+        assert!(out.contains("tiers within reach"), "{out}");
+        assert!(out.contains("⭐ Starstruck"), "{out}");
+        assert!(!out.contains("GOLD COMPLETE"), "{out}");
+    }
+
+    #[test]
+    fn track_output_contains_no_escape_sequences_when_plain() {
+        let items = [progress(&PULL_SHARK, 11), progress(&STARSTRUCK, 5000)];
+        assert!(!render_track(&report(true, items.to_vec()), 5, plain()).contains('\x1b'));
+    }
+
+    #[test]
     fn colors_never_change_the_layout() {
         let items = [
             progress(&PULL_SHARK, 72),
@@ -475,8 +646,8 @@ mod tests {
             progress(&PAIR_EXTRAORDINAIRE, 4),
             progress(&PULL_SHARK, 5000),
         ];
-        let colored = render_check("octocat", &items, false, Palette::new(true));
-        let plain_out = render_check("octocat", &items, false, plain());
+        let colored = render_check(&report(false, items.to_vec()), Palette::new(true));
+        let plain_out = render_check(&report(false, items.to_vec()), plain());
         assert_eq!(strip_ansi(&colored), plain_out);
 
         let colored = render_hunt(
@@ -493,6 +664,11 @@ mod tests {
             &[issue(1), issue(2)],
             plain(),
         );
+        assert_eq!(strip_ansi(&colored), plain_out);
+
+        let track_items = [progress(&PULL_SHARK, 11), progress(&STARSTRUCK, 0)];
+        let colored = render_track(&report(false, track_items.to_vec()), 5, Palette::new(true));
+        let plain_out = render_track(&report(false, track_items.to_vec()), 5, plain());
         assert_eq!(strip_ansi(&colored), plain_out);
     }
 

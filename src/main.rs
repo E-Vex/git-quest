@@ -4,7 +4,9 @@ mod cli;
 mod display;
 mod github;
 mod hunt;
+mod progress;
 mod readme;
+mod track;
 mod validate;
 
 use clap::Parser;
@@ -24,10 +26,13 @@ async fn main() -> ExitCode {
             Ok(())
         }
         cli::Command::Readme { username } => {
-            readme::run(username.as_deref().unwrap_or(""), pal).await
+            readme::run(username.as_deref().unwrap_or(""), cli.json).await
         }
         cli::Command::Check { username } => {
             check::run(username.as_deref().unwrap_or(""), pal, cli.json).await
+        }
+        cli::Command::Track { username, reach } => {
+            track::run(username.as_deref().unwrap_or(""), reach, pal, cli.json).await
         }
         cli::Command::Hunt {
             lang,
